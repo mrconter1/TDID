@@ -141,16 +141,16 @@ def load_image():
   target_name_1 = data[5]
   target_name_2 = data[6]
 
-  image = cv2.imread(os.path.join(pathToFolder, "Data", image_name))
+  pre_load_image = cv2.imread(os.path.join(pathToFolder, "Data", image_name))
+  pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
+  pre_load_target_2 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_2))
+
+  image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
   bbox = [int(data[1]), int(data[2]), int(data[3]), int(data[4]), 1]
-  #target1 = cv2.imread(pathToFolder + target_name_1)
-  #target2 = cv2.imread(pathToFolder + target_name_2)
+  target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
+  target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
 
-  print("Printing image")
-  print(image)
-
-load_image()
-
+  return image, bbox, target1, target2
 
 print('Begin Training...')
 for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
@@ -219,6 +219,17 @@ for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
 
             batch_im_data.append(im_data)
             batch_gt_boxes.extend(gt_boxes)
+
+        batch_im_data = []
+        batch_target_data = []
+        batch_gt_boxes = []
+
+        im_data, batch_gt_boxes, target1, target2 = load_image()
+
+        batch_im_data.append(normalize_image(im_data,cfg))
+        batch_gt_boxes.extend(gt_boxes)
+        batch_target_data.append(normalize_image(target1,cfg))
+        batch_target_data.append(normalize_image(target2,cfg))
 
         #prep data for input to network
         target_data = match_and_concat_images_list(batch_target_data,
