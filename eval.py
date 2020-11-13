@@ -1,47 +1,49 @@
-import os
 import torch
+import torch.utils.data
 import torchvision.models as models
-import cv2
-import numpy as np
+import os
+import sys
 import importlib
-import json
+import numpy as np
+from datetime import datetime
+import cv2
+import time
 
-from model_defs.TDID import TDID
-from model_defs.nms.nms_wrapper import nms
-from utils import * 
+from model_defs.TDID import TDID 
+from utils import *
+from evaluation.coco_det_eval import coco_det_eval 
 
-import active_vision_dataset_processing.data_loading.active_vision_dataset as AVD  
-
+import active_vision_dataset_processing.data_loading.active_vision_dataset as AVD
 
 def im_detect(net, target_data,im_data, im_info, features_given=True):
-    """
-    Detect single target object in a single scene image.
+  """
+  Detect single target object in a single scene image.
 
-    Input Parameters:
-        net: (TDID) the network
-        target_data: (torch Variable) target images
-        im_data: (torch Variable) scene_image
-        im_info: (tuple) (height,width,channels) of im_data
-        
-        features_given(optional): (bool) if true, target_data and im_data
-                                  are feature maps from net.features,
-                                  not images. Default: True
-                                    
+  Input Parameters:
+      net: (TDID) the network
+      target_data: (torch Variable) target images
+      im_data: (torch Variable) scene_image
+      im_info: (tuple) (height,width,channels) of im_data
+      
+      features_given(optional): (bool) if true, target_data and im_data
+                                are feature maps from net.features,
+                                not images. Default: True
+                                  
 
-    Returns:
-        scores (ndarray): N x 2 array of class scores
-                          (N boxes, classes={background,target})
-        boxes (ndarray): N x 4 array of predicted bounding boxes
-    """
+  Returns:
+      scores (ndarray): N x 2 array of class scores
+                        (N boxes, classes={background,target})
+      boxes (ndarray): N x 4 array of predicted bounding boxes
+  """
 
-    cls_prob, rois = net(target_data, im_data, im_info,
-                                    features_given=features_given)
-    scores = cls_prob.data.cpu().numpy()[0,:,:]
-    zs = np.zeros((scores.size, 1))
-    scores = np.concatenate((zs,scores),1)
-    boxes = rois.data.cpu().numpy()[0,:, :]
+  cls_prob, rois = net(target_data, im_data, im_info,
+                                  features_given=features_given)
+  scores = cls_prob.data.cpu().numpy()[0,:,:]
+  zs = np.zeros((scores.size, 1))
+  scores = np.concatenate((zs,scores),1)
+  boxes = rois.data.cpu().numpy()[0,:, :]
 
-    return scores, boxes
+  return scores, boxes
 
 import random
 def load_image():
@@ -67,44 +69,56 @@ def load_image():
 
   return image, bbox, target1, target2
 
-if __name__ == '__main__':
+# load config
+cfg_file = "configAVD1"
+cfg = importlib.import_module('configs.'+cfg_file)
+cfg = cfg.get_config()
 
-    #load config file
-    cfg_file = 'configAVD1' #NO EXTENSTION!
-    cfg = importlib.import_module('configs.'+cfg_file)
-    cfg = cfg.get_config()
-
-    # load net
-    print('Loading ' + cfg.FULL_MODEL_LOAD_NAME + ' ...')
-    net = TDID(cfg)
+print('Loading network...')
+net = TDID(cfg)
+if cfg.LOAD_FULL_MODEL:
     load_net(cfg.FULL_MODEL_LOAD_DIR + cfg.FULL_MODEL_LOAD_NAME, net)
-    net.features.eval()#freeze batchnorms layers?
-    print('load model successfully!')
-    
-    #net.cuda()
-    net.eval()
+else:
+    weights_normal_init(net, dev=0.01)
+    if cfg.USE_PRETRAINED_WEIGHTS:
+        net.features = load_pretrained_weights(cfg.FEATURE_NET_NAME) 
+net.features.eval()#freeze batchnorms layers?
 
-    batch_im_data = []
-    batch_target_data = []
-    batch_gt_boxes = []
+if not os.path.exists(cfg.SNAPSHOT_SAVE_DIR):
+    os.makedirs(cfg.SNAPSHOT_SAVE_DIR)
+if not os.path.exists(cfg.META_SAVE_DIR):
+    os.makedirs(cfg.META_SAVE_DIR)
 
-    im_data, gt_boxes, target1, target2 = load_image()
+#put net on gpu
+net.cuda()
+net.eval()
 
-    batch_im_data.append(normalize_image(im_data,cfg))
-    batch_gt_boxes.extend(gt_boxes)
-    batch_target_data.append(normalize_image(target1,cfg))
-    batch_target_data.append(normalize_image(target2,cfg))
 
-    #prep data for input to network
-    target_data = match_and_concat_images_list(batch_target_data,
-                                                min_size=cfg.MIN_TARGET_SIZE)
-    im_data = match_and_concat_images_list(batch_im_data)
-    gt_boxes = np.asarray(batch_gt_boxes) 
-    im_info = im_data.shape[1:]
-    im_data = np_to_variable(im_data, is_cuda=True)
-    im_data = im_data.permute(0, 3, 1, 2).contiguous()
-    target_data = np_to_variable(target_data, is_cuda=True)
-    target_data = target_data.permute(0, 3, 1, 2).contiguous()
+batch_im_data = []
+batch_target_data = []
+batch_gt_boxes = []
 
-    print("hi")
-  
+im_data, gt_boxes, target1, target2 = load_image()
+
+batch_im_data.append(normalize_image(im_data,cfg))
+batch_gt_boxes.extend(gt_boxes)
+batch_target_data.append(normalize_image(target1,cfg))
+batch_target_data.append(normalize_image(target2,cfg))
+
+#prep data for input to network
+target_data = match_and_concat_images_list(batch_target_data,
+                                            min_size=cfg.MIN_TARGET_SIZE)
+im_data = match_and_concat_images_list(batch_im_data)
+gt_boxes = np.asarray(batch_gt_boxes) 
+im_info = im_data.shape[1:]
+im_data = np_to_variable(im_data, is_cuda=True)
+im_data = im_data.permute(0, 3, 1, 2).contiguous()
+target_data = np_to_variable(target_data, is_cuda=True)
+target_data = target_data.permute(0, 3, 1, 2).contiguous()
+
+scores, boxes = im_detect(net, target_data, im_data, im_info, features_given=False)
+
+print(len(boxes[0]))
+
+
+
