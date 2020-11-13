@@ -128,6 +128,31 @@ total_iterations = 1
 
 save_training_meta_data(cfg,net)
 
+import random
+def load_image():
+
+  pathToFolder = '/content/drive/My Drive/Data/SyntheticDataset/'
+
+  f=open(pathToFolder + "info.csv")
+  lines=f.readlines()
+
+  data = random.choice(lines).split("\t")
+  image_name = data[0]
+  target_name_1 = data[5]
+  target_name_2 = data[6]
+
+  print(target_name_2)
+
+  image = cv2.imread(pathToFolder + image_name)
+  bbox = [int(data[1]), int(data[2]), int(data[3]), int(data[4]), 1]
+  target1 = cv2.imread(pathToFolder + target_name_1)
+  target2 = cv2.imread(pathToFolder + target_name_2)
+
+  print(image)
+
+load_image()
+
+
 print('Begin Training...')
 for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
     target_use_cnt = {}
