@@ -141,13 +141,12 @@ def load_image():
   target_name_1 = data[5]
   target_name_2 = data[6]
 
-  print(target_name_2)
-
-  image = cv2.imread(pathToFolder + image_name)
+  image = cv2.imread(os.path.join(pathToFolder, "Data", image_name))
   bbox = [int(data[1]), int(data[2]), int(data[3]), int(data[4]), 1]
-  target1 = cv2.imread(pathToFolder + target_name_1)
-  target2 = cv2.imread(pathToFolder + target_name_2)
+  #target1 = cv2.imread(pathToFolder + target_name_1)
+  #target2 = cv2.imread(pathToFolder + target_name_2)
 
+  print("Printing image")
   print(image)
 
 load_image()
