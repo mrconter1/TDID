@@ -45,25 +45,34 @@ def im_detect(net, target_data,im_data, im_info, features_given=True):
 
   return scores, boxes
 
-import random
-def load_image():
-
-  pathToFolder = '/content/drive/My Drive/ActiveVisionDataset/'
-
-  valid_files = []
-  count = 0
-  for currentpath, folders, files in os.walk(pathToFolder):
+def find_files(string path, file_ending):
+  for currentpath, folders, files in os.walk(path):
     for filename in files:
         filepath = os.path.join(currentpath, filename)
-        if (filepath.endswith(".jpg")):
+        if (filepath.endswith(file_ending)):
           valid_files.append(filepath)
           print(count)
           count += 1
 
+import random
+def load_image():
+
+  pathToBackgrouds = '/content/drive/My Drive/ActiveVisionDataset/'
+  pathToGT = '/content/drive/My Drive/Data/GT/'
+
+  valid_files = find_files(pathToBackgrouds)
+
   chosen_image_path = random.choice(valid_files)
   chosen_image = chosen_image_path.split("/")[-1]
 
-  
+  '''
+  json_files = []
+  for currentpath, folders, files in os.walk(pathToFolder):
+    for filename in files:
+        filepath = os.path.join(currentpath, filename)
+        if (filepath.endswith(".json")):
+          json_files.append(filepath)
+  '''
 
   pre_load_image = cv2.imread(chosen_image_path)
   #pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
@@ -78,6 +87,7 @@ def load_image():
   
 
 # load config
+'''
 cfg_file = "configAVD1"
 cfg = importlib.import_module('configs.'+cfg_file)
 cfg = cfg.get_config()
@@ -96,6 +106,7 @@ if not os.path.exists(cfg.SNAPSHOT_SAVE_DIR):
     os.makedirs(cfg.SNAPSHOT_SAVE_DIR)
 if not os.path.exists(cfg.META_SAVE_DIR):
     os.makedirs(cfg.META_SAVE_DIR)
+'''
 
 load_image();
 
