@@ -89,15 +89,23 @@ def load_image():
         for value in bounding_boxes_data.split(","):
           bb_data.append(int(value))
 
-        category_id = data.split("\"category_id\": ")[1].split(",")[0]
+        category_id = int(data.split("\"category_id\": ")[1].split(",")[0])
 
+        target_name = ""
         with open(pathToBackgrounds + "instance_id_map.txt", 'r') as file:
           lines = file.readlines()
-          print(lines)
+          for line in lines:
+            line = line.rstrip()
+            linesplit = line.split(" ")
+            name = linesplit[0]
+            cat_num = int(linesplit[1])
+            if cat_num == category_id:
+              target_name = name
 
         print(image_id)
         print(bb_data)
         print(category_id)
+        print(target_name)
 
         break
       
