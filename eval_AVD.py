@@ -50,30 +50,32 @@ def load_image():
 
   pathToFolder = '/content/drive/My Drive/ActiveVisionDataset/'
 
+  valid_files = []
+  count = 0
   for currentpath, folders, files in os.walk(pathToFolder):
     for filename in files:
         filepath = os.path.join(currentpath, filename)
-        print(filepath)
-  '''
-  f=open(pathToFolder + "info.csv")
-  lines=f.readlines()
+        if (filepath.endswith(".jpg")):
+          valid_files.append(filepath)
+          print(count)
+          count += 1
 
-  data = random.choice(lines).split("\t")
-  image_name = data[0]
-  target_name_1 = data[5]
-  target_name_2 = data[6]
+  chosen_image_path = random.choice(valid_files)
+  chosen_image = chosen_image_path.split("/")[-1]
 
-  pre_load_image = cv2.imread(os.path.join(pathToFolder, "Data", image_name))
-  pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
-  pre_load_target_2 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_2))
+  
+
+  pre_load_image = cv2.imread(chosen_image_path)
+  #pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
+  #pre_load_target_2 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_2))
 
   image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
-  bbox = [int(data[1]), int(data[2]), int(data[3]), int(data[4]), 1]
-  target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
-  target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
+  #bbox = [int(data[1]), int(data[2]), int(data[3]), int(data[4]), 1]
+  #target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
+  #target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
 
-  return image, bbox, target1, target2
-  '''
+  #return image, bbox, target1, target2
+  
 
 # load config
 cfg_file = "configAVD1"
