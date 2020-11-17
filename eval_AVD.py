@@ -59,6 +59,7 @@ def load_image():
 
   pathToBackgrounds = '/content/drive/My Drive/ActiveVisionDataset/'
   pathToGT = '/content/drive/My Drive/Data/GT/'
+  pathToTargets = '/content/drive/My Drive/Data/AVD_and_BigBIRD_targets_v1/'
 
   valid_files = find_files(pathToBackgrounds, ".jpg")
 
@@ -102,28 +103,32 @@ def load_image():
             if cat_num == category_id:
               target_name = name
 
-        print(image_id)
-        print(bb_data)
-        print(category_id)
-        print(target_name)
+        target_paths = find_files(pathToTargets, ".jpg")
+        target_image_paths_1 = []
+        target_image_paths_2 = []
+        for target_path in target_paths:
+          if target_name in target_path:
+            if "target_0" in target_path:
+              target_image_paths_1.append(target_path) 
+            elif "target_1" in target_path:
+              target_image_paths_2.append(target_path) 
 
+        '''
+        pre_load_image = cv2.imread(chosen_image_path)
+        pre_load_target_1 = cv2.imread(random.choice(target_image_paths_0))
+        pre_load_target_2 = cv2.imread(random.choice(target_image_paths_1))
+
+        image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
+        bbox = [bb_data[0], bb_data[1], bb_data[2], bb_data[3], 1]
+        target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
+        target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
+
+        return image, bbox, target1, target2
+        '''
         break
       
       except:
-
         continue
-
-  #pre_load_image = cv2.imread(chosen_image_path)
-  #pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
-  #pre_load_target_2 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_2))
-
-  #image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
-  #bbox = [bb_data[0], bb_data[1], bb_data[2], bb_data[3], 1]x)
-  #target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
-  #target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
-
-  #return image, bbox, target1, target2
-  
 
 # load config
 '''
