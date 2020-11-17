@@ -57,42 +57,60 @@ def find_files(path, file_ending):
 import random
 def load_image():
 
-  pathToBackgrouds = '/content/drive/My Drive/ActiveVisionDataset/'
+  pathToBackgrounds = '/content/drive/My Drive/ActiveVisionDataset/'
   pathToGT = '/content/drive/My Drive/Data/GT/'
 
-  valid_files = find_files(pathToBackgrouds, ".jpg")
+  valid_files = find_files(pathToBackgrounds, ".jpg")
 
-  chosen_image_path = random.choice(valid_files)
-  chosen_image = chosen_image_path.split("/")[-1]
+  while True:
 
-  json_files = find_files(pathToGT, ".json")
-  json_data = ""
-  for json_file in json_files:
-    with open(json_file, 'r') as file:
-      lines = file.readlines()
-      for line in lines:
-        json_data += line
+    chosen_image_path = random.choice(valid_files)
+    chosen_image = chosen_image_path.split("/")[-1]
 
-  if chosen_image in json_data:
+    json_files = find_files(pathToGT, ".json")
+    json_data = ""
+    for json_file in json_files:
+      with open(json_file, 'r') as file:
+        lines = file.readlines()
+        for line in lines:
+          json_data += line
 
-    image_id = json_data.split(chosen_image)[1].split("}")[0]
-    image_id = image_id.split("id\": ")[1].split(",")[0]
+    if chosen_image in json_data:
 
-    bb_data = []
-    bounding_boxes_data = json_data.split("\"image_id\": " + image_id + ", \"bbox\": [")[1]
-    bounding_boxes_data = bounding_boxes_data.split("]")[0]
-    for value in bounding_boxes_data.split(","):
-      bb_data.append(int(value))
+      try:
 
-    print(image_id)
-    print(bb_data)
+        image_id = json_data.split(chosen_image)[1].split("}")[0]
+        image_id = image_id.split("id\": ")[1].split(",")[0]
 
-  pre_load_image = cv2.imread(chosen_image_path)
+        data = json_data.split("\"image_id\": " + image_id)[1].split("}")[0]
+
+        bb_data = []
+        bounding_boxes_data = data.split("\"bbox\": [")[1].split("]")[0]
+        for value in bounding_boxes_data.split(","):
+          bb_data.append(int(value))
+
+        category_id = data.split("\"category_id\": ")[1].split(",")[0]
+
+        with open(pathToBackgrounds + "instance_id_map.txt", 'r') as file:
+          lines = file.readlines()
+          print(lines)
+
+        print(image_id)
+        print(bb_data)
+        print(category_id)
+
+        break
+      
+      except:
+
+        continue
+
+  #pre_load_image = cv2.imread(chosen_image_path)
   #pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
   #pre_load_target_2 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_2))
 
-  image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
-  bbox = [bb_data[0], bb_data[1], bb_data[2], bb_data[3], 1]x)
+  #image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
+  #bbox = [bb_data[0], bb_data[1], bb_data[2], bb_data[3], 1]x)
   #target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
   #target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
 
