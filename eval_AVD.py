@@ -66,16 +66,23 @@ def load_image():
   chosen_image = chosen_image_path.split("/")[-1]
 
   json_files = find_files(pathToGT, ".json")
-  print(json_files)
+  json_data = ""
+  for json_file in json_files:
+    with open(json_file, 'r') as file:
+      lines = file.readlines()
+      for line in lines:
+        json_data += line
 
-  '''
-  json_files = []
-  for currentpath, folders, files in os.walk(pathToFolder):
-    for filename in files:
-        filepath = os.path.join(currentpath, filename)
-        if (filepath.endswith(".json")):
-          json_files.append(filepath)
-  '''
+  if chosen_image in json_data:
+
+    image_id = json_data.split(chosen_image)[1].split("}")[0]
+    image_id = image_id.split("id\": ")[1].split(",")[0]
+
+    bounding_boxes = json_data.split("\"image_id\": " + image_id + ", \"bbox\": [")[1]
+    bounding_boxes = bounding_boxes.split("]")[0]
+
+    print(image_id)
+    print(bounding_boxes)
 
   pre_load_image = cv2.imread(chosen_image_path)
   #pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
