@@ -78,18 +78,21 @@ def load_image():
     image_id = json_data.split(chosen_image)[1].split("}")[0]
     image_id = image_id.split("id\": ")[1].split(",")[0]
 
-    bounding_boxes = json_data.split("\"image_id\": " + image_id + ", \"bbox\": [")[1]
-    bounding_boxes = bounding_boxes.split("]")[0]
+    bb_data = []
+    bounding_boxes_data = json_data.split("\"image_id\": " + image_id + ", \"bbox\": [")[1]
+    bounding_boxes_data = bounding_boxes_data.split("]")[0]
+    for value in bounding_boxes_data.split(","):
+      bb_data.append(int(value))
 
     print(image_id)
-    print(bounding_boxes)
+    print(bb_data)
 
   pre_load_image = cv2.imread(chosen_image_path)
   #pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
   #pre_load_target_2 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_2))
 
   image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
-  #bbox = [int(data[1]), int(data[2]), int(data[3]), int(data[4]), 1]
+  bbox = [bb_data[0], bb_data[1], bb_data[2], bb_data[3], 1]x)
   #target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
   #target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
 
