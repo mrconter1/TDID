@@ -45,14 +45,14 @@ def im_detect(net, target_data,im_data, im_info, features_given=True):
 
   return scores, boxes
 
-def find_files(string path, file_ending):
+def find_files(path, file_ending):
+  found_files = []
   for currentpath, folders, files in os.walk(path):
     for filename in files:
         filepath = os.path.join(currentpath, filename)
         if (filepath.endswith(file_ending)):
-          valid_files.append(filepath)
-          print(count)
-          count += 1
+          found_files.append(filepath)
+  return found_files
 
 import random
 def load_image():
@@ -60,10 +60,13 @@ def load_image():
   pathToBackgrouds = '/content/drive/My Drive/ActiveVisionDataset/'
   pathToGT = '/content/drive/My Drive/Data/GT/'
 
-  valid_files = find_files(pathToBackgrouds)
+  valid_files = find_files(pathToBackgrouds, ".jpg")
 
   chosen_image_path = random.choice(valid_files)
   chosen_image = chosen_image_path.split("/")[-1]
+
+  json_files = find_files(pathToGT, ".json")
+  print(json_files)
 
   '''
   json_files = []
