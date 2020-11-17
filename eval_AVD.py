@@ -112,26 +112,23 @@ def load_image():
               target_image_paths_1.append(target_path) 
             elif "target_1" in target_path:
               target_image_paths_2.append(target_path) 
-
-        '''
+        
         pre_load_image = cv2.imread(chosen_image_path)
-        pre_load_target_1 = cv2.imread(random.choice(target_image_paths_0))
-        pre_load_target_2 = cv2.imread(random.choice(target_image_paths_1))
+        pre_load_target_1 = cv2.imread(random.choice(target_image_paths_1))
+        pre_load_target_2 = cv2.imread(random.choice(target_image_paths_2))
 
+        
         image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
         bbox = [bb_data[0], bb_data[1], bb_data[2], bb_data[3], 1]
         target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
         target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
 
         return image, bbox, target1, target2
-        '''
-        break
       
-      except:
-        continue
+      except Exception as e:
+        print(e)
 
 # load config
-'''
 cfg_file = "configAVD1"
 cfg = importlib.import_module('configs.'+cfg_file)
 cfg = cfg.get_config()
@@ -150,11 +147,6 @@ if not os.path.exists(cfg.SNAPSHOT_SAVE_DIR):
     os.makedirs(cfg.SNAPSHOT_SAVE_DIR)
 if not os.path.exists(cfg.META_SAVE_DIR):
     os.makedirs(cfg.META_SAVE_DIR)
-'''
-
-load_image();
-
-'''
 
 #put net on gpu
 net.cuda()
@@ -185,6 +177,3 @@ target_data = target_data.permute(0, 3, 1, 2).contiguous()
 scores, boxes = im_detect(net, target_data, im_data, im_info, features_given=False)
 
 print(boxes[0])
-
-'''
-
