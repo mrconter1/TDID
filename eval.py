@@ -118,7 +118,7 @@ target_data = target_data.permute(0, 3, 1, 2).contiguous()
 
 scores, boxes = im_detect(net, target_data, im_data, im_info, features_given=False)
 
-print(len(boxes[0]))
+print(boxes[0])
 
 
 
