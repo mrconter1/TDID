@@ -1,0 +1,989 @@
+import os
+import torch
+import torch.nn as nn
+import torchvision.models as models
+import cv2
+import numpy as np
+from torch.autograd import Variable
+import torch.nn.functional as F
+import sys
+from proposal_layer import proposal_layer as proposal_layer_py
+import h5py
+
+class Config():
+    """
+    Holds all config parameters for training/testing.
+    """
+
+    #Directories - MUST BE CHANGED for your environment
+    DATA_BASE_DIR = '/content/drive/My Drive/Data/'
+    AVD_ROOT_DIR = '/net/bvisionserver3/playpen10/ammirato/Data/HalvedRohitData/'
+    FULL_MODEL_LOAD_DIR= os.path.join(DATA_BASE_DIR, 'Models/')
+    SNAPSHOT_SAVE_DIR= os.path.join(DATA_BASE_DIR , 'Models/')
+    META_SAVE_DIR = os.path.join(DATA_BASE_DIR, 'ModelsMeta/')
+    TARGET_IMAGE_DIR= os.path.join(DATA_BASE_DIR, 'AVD_and_BigBIRD_targets_v1/')
+    TEST_OUTPUT_DIR = os.path.join(DATA_BASE_DIR, 'TestOutputs/')
+    TEST_GROUND_TRUTH_BOXES = os.path.join(DATA_BASE_DIR, 'GT/AVD_split1_test.json')
+    VAL_GROUND_TRUTH_BOXES = os.path.join(DATA_BASE_DIR ,'GT/AVD_part3_val.json')
+
+
+    #Model Loading and saving 
+    FEATURE_NET_NAME= 'vgg16_bn'
+    PYTORCH_FEATURE_NET= True
+    USE_PRETRAINED_WEIGHTS = True
+    FULL_MODEL_LOAD_NAME= 'TDID_AVD1.h5'
+    LOAD_FULL_MODEL= True 
+    MODEL_BASE_SAVE_NAME = 'TDID_AVD1_03'
+    SAVE_FREQ  = 5 
+    SAVE_BY_EPOCH = True 
+
+
+    #Training 
+    MAX_NUM_EPOCHS= 16
+    BATCH_SIZE = 5 
+    LEARNING_RATE = .0001
+    MOMENTUM = .9
+    WEIGHT_DECAY = .0005
+    DISPLAY_INTERVAL = 10
+    NUM_WORKERS = 4 
+    RESIZE_IMG = 0 
+    RESIZE_IMG_FACTOR = .5 
+    CHOOSE_PRESENT_TARGET = .6
+    DET4CLASS = False 
+
+    #Target Images
+    PRELOAD_TARGET_IMAGES= False
+    AUGMENT_TARGET_IMAGES= .9 
+    AUGMENT_TARGET_ILLUMINATION= .3 
+    MIN_TARGET_SIZE = 32
+
+    #Training Data
+    ID_MAP_FNAME= 'all_instance_id_map.txt'
+    ID_TO_NAME = {}
+    NAME_TO_ID = {}
+    #OBJ_IDS_TO_EXCLUDE = [8,18,32,33]
+
+    #TRAIN_OBJ_IDS=[cid for cid in range(1,33) if cid not in OBJ_IDS_TO_EXCLUDE] 
+    FRACTION_OF_NO_BOX_IMAGES = .1 
+    MAX_OBJ_DIFFICULTY= 4
+    TRAIN_LIST= [
+                 'Home_002_1',
+                 'Home_003_1',
+                 'Home_003_2',
+                 'Home_004_1',
+                 'Home_004_2',
+                 'Home_005_1',
+                 'Home_005_2',
+                 'Home_006_1',
+                 'Home_014_1',
+                 'Home_014_2',
+                 'Office_001_1',
+                ]
+
+    #VAL_OBJ_IDS = TRAIN_OBJ_IDS 
+    VAL_FRACTION_OF_NO_BOX_IMAGES = .01 
+    VAL_LIST=   [
+                 'Home_007_1',
+                 'Home_010_1',
+                 'Home_011_1',
+                ]
+
+    ##############################################
+    #Testing
+    TEST_RESIZE_IMG_FACTOR = 0 
+    TEST_RESIZE_BOXES_FACTOR = 2
+    MAX_DETS_PER_TARGET = 5
+    SCORE_THRESH = .01
+    TEST_NMS_OVERLAP_THRESH = .7
+
+    #TEST_OBJ_IDS= TRAIN_OBJ_IDS
+    TEST_FRACTION_OF_NO_BOX_IMAGES =  1 
+    TEST_LIST = [ 
+                 'Home_001_1',
+                 'Home_001_2',
+                 'Home_008_1',
+                ]
+    TEST_ONE_AT_A_TIME = False 
+    ###############################################
+    #Model paramters
+    ANCHOR_SCALES = [1,2,4]
+    NUM_TARGETS = 2
+    CORR_WITH_POOLED = True 
+    USE_IMG_FEATS = False 
+    USE_DIFF_FEATS = True 
+    USE_CC_FEATS = True 
+
+    PRE_NMS_TOP_N = 6000
+    POST_NMS_TOP_N = 300
+    NMS_THRESH = .7
+    PROPOSAL_MIN_BOX_SIZE = 8 
+    PROPOSAL_CLOBBER_POSITIVES = False 
+    PROPOSAL_NEGATIVE_OVERLAP = .3
+    PROPOSAL_POSITIVE_OVERLAP = .6
+    PROPOSAL_FG_FRACTION = .5
+    PROPOSAL_BATCH_SIZE = 300 
+    PROPOSAL_POSITIVE_WEIGHT = -1
+    PROPOSAL_BBOX_INSIDE_WEIGHTS = [1,1,1,1]
+
+    EPS = 1e-14
+
+
+
+def get_config():
+
+    cfg = Config()
+    
+    return cfg 
+
+    USE_CC_FEATS = True 
+
+    PRE_NMS_TOP_N = 6000
+    POST_NMS_TOP_N = 300
+    NMS_THRESH = .7
+    PROPOSAL_MIN_BOX_SIZE = 8 
+    PROPOSAL_CLOBBER_POSITIVES = False 
+    PROPOSAL_NEGATIVE_OVERLAP = .3
+    PROPOSAL_POSITIVE_OVERLAP = .6
+    PROPOSAL_FG_FRACTION = .5
+    PROPOSAL_BATCH_SIZE = 300 
+    PROPOSAL_POSITIVE_WEIGHT = -1
+    PROPOSAL_BBOX_INSIDE_WEIGHTS = [1,1,1,1]
+
+    EPS = 1e-14
+
+
+
+def get_config():
+
+    cfg = Config()
+    
+    return cfg 
+
+class TDID(torch.nn.Module):
+    '''
+    Target Driven Instance Detection network.
+
+    Detects a single target object in a scene image. Fully convolutional.
+
+    Input parameters:
+        cfg: (Config) a config instance from configs/
+    '''
+
+    def __init__(self, cfg):
+        super(TDID, self).__init__()
+        self.cfg = cfg
+        self.anchor_scales = cfg.ANCHOR_SCALES
+
+        self.features,self._feat_stride,self.num_feature_channels = \
+                                    self.get_feature_net(cfg.FEATURE_NET_NAME)
+        self.embedding_conv = self.get_embedding_conv(cfg)
+        self.corr_conv = Conv2d(cfg.NUM_TARGETS*self.num_feature_channels,
+                              self.num_feature_channels, 3, 
+                              relu=True, same_padding=True)
+        self.diff_conv = Conv2d(cfg.NUM_TARGETS*self.num_feature_channels,
+                                self.num_feature_channels, 3, 
+                                relu=True, same_padding=True)
+        #for getting output size of score and bbbox convs
+        # 3 = number of anchor aspect ratios
+        # 2 = number of classes (background, target)
+        # 4 = number of bounding box parameters
+        self.score_conv = Conv2d(512, len(self.anchor_scales) * 3 * 2, 1, relu=False, same_padding=False)
+        self.bbox_conv = Conv2d(512, len(self.anchor_scales) * 3 * 4, 1, relu=False, same_padding=False)
+
+        # loss
+        self.class_cross_entropy_loss = None
+        self.box_regression_loss = None
+        self.roi_cross_entropy_loss = None
+
+    @property
+    def loss(self):
+        '''
+        Get loss of last forward pass through the network     
+        '''
+        return self.class_cross_entropy_loss + self.box_regression_loss * 10
+
+    def forward(self, target_data, img_data, img_info, gt_boxes=None,
+                features_given=False):
+        '''
+        Forward pass through TDID network.
+
+        B = batch size
+        C = number of channels
+        H = height
+        W = width
+
+        Input parameters:
+            target_data: (torch.FloatTensor) (B*2)xCxHxW tensor of target data 
+            img_data: (torch.FloatTensor) BxCxHxW tensor of scene image data 
+            img_info: (tuple) shape of original scene image
+            
+            gt_boxes (optional): (ndarray) ground truth bounding boxes for this
+                                 scene/target pair. Must be provided for training
+                                 not used for testing. Default: None
+            features_given (optional): (bool) If True, target_data and img_data
+                                       are assumed to be feature maps. The feature
+                                       extraction portion of the forward pass
+                                       is skipped. Default: False
+
+        Returns:
+            scores: (torch.autograd.variable.Variable) Bxcfg.PROPOSAL_BATCH_SIZEx1
+            rois: (torch.autograd.variable.Variable) Bxcfg.PROPOSAL_BATCH_SIZEx4
+
+        '''
+        if features_given:
+            img_features = img_data
+            target_features = target_data 
+        else:
+            img_features = self.features(img_data)
+            target_features = self.features(target_data)
+
+
+        all_corrs = []
+        all_diffs = []
+        for batch_ind in range(img_features.size()[0]):
+            img_ind = np_to_variable(np.asarray([batch_ind]),
+                                     is_cuda=True, dtype=torch.LongTensor)
+            cur_img_feats = torch.index_select(img_features,0,img_ind)
+
+            cur_diffs = []
+            cur_corrs = []
+            for target_type in range(self.cfg.NUM_TARGETS):
+                target_ind = np_to_variable(np.asarray([batch_ind*
+                                            self.cfg.NUM_TARGETS+target_type]),
+                                            is_cuda=True,dtype=torch.LongTensor)
+                cur_target_feats = torch.index_select(target_features,0,
+                                                      target_ind[0])
+                cur_target_feats = cur_target_feats.view(-1,1,
+                                                     cur_target_feats.size()[2],
+                                                     cur_target_feats.size()[3])
+                pooled_target_feats = F.max_pool2d(cur_target_feats,
+                                         (cur_target_feats.size()[2],
+                                          cur_target_feats.size()[3]))
+
+                cur_diffs.append(cur_img_feats -
+                    pooled_target_feats.permute(1,0,2,3).expand_as(cur_img_feats))
+                if self.cfg.CORR_WITH_POOLED:
+                    cur_corrs.append(F.conv2d(cur_img_feats,
+                                             pooled_target_feats,
+                                             groups=self.num_feature_channels))
+                else:
+                    target_conv_padding = (max(0,int(
+                                          target_features.size()[2]/2)), 
+                                           max(0,int(
+                                           target_features.size()[3]/2)))
+                    cur_corrs.append(F.conv2d(cur_img_feats,cur_target_feats,
+                                             padding=target_conv_padding,
+                                             groups=self.num_feature_channels))
+                
+
+            cur_corrs = torch.cat(cur_corrs,1)
+            cur_corrs = self.select_to_match_dimensions(cur_corrs,cur_img_feats)
+            all_corrs.append(cur_corrs)
+            all_diffs.append(torch.cat(cur_diffs,1))
+
+        corr = self.corr_conv(torch.cat(all_corrs,0))
+        diff = self.diff_conv(torch.cat(all_diffs,0))
+      
+        if self.cfg.USE_IMG_FEATS and self.cfg.USE_DIFF_FEATS:
+            if self.cfg.USE_CC_FEATS: 
+                concat_feats = torch.cat([corr,img_features, diff],1) 
+            else:
+                concat_feats = torch.cat([img_features, diff],1) 
+        elif self.cfg.USE_IMG_FEATS:
+            if self.cfg.USE_CC_FEATS: 
+                concat_feats = torch.cat([corr,img_features],1) 
+            else:
+                concat_feats = torch.cat([img_features],1) 
+        elif self.cfg.USE_DIFF_FEATS:
+            if self.cfg.USE_CC_FEATS: 
+                concat_feats = torch.cat([corr,diff],1) 
+            else:
+                concat_feats = torch.cat([diff],1) 
+        else:
+            concat_feats = corr 
+
+        embedding_feats = self.embedding_conv(concat_feats)
+        class_score = self.score_conv(embedding_feats)
+        class_score_reshape = self.reshape_layer(class_score, 2)
+        class_prob = F.softmax(class_score_reshape)
+        class_prob_reshape = self.reshape_layer(class_prob, len(self.anchor_scales)*3*2)
+
+        bbox_pred = self.bbox_conv(embedding_feats)
+
+        # proposal layer
+        rois, scores, anchor_inds, labels = self.proposal_layer(
+                                                           class_prob_reshape,
+                                                           bbox_pred,
+                                                           img_info,
+                                                           self.cfg,
+                                                           self._feat_stride, 
+                                                           self.anchor_scales,
+                                                           gt_boxes)
+    
+        if self.training:
+            assert gt_boxes is not None
+            anchor_data = self.anchor_target_layer(class_score,gt_boxes, 
+                                                img_info, self.cfg,
+                                                self._feat_stride, 
+                                                self.anchor_scales)
+            self.class_cross_entropy_loss, self.box_regression_loss = \
+                    self.build_loss(class_score_reshape, bbox_pred, anchor_data)
+
+            self.roi_cross_entropy_loss = self.build_roi_loss(class_score, 
+                                                    scores,anchor_inds, labels)
+
+        return scores, rois
+
+
+
+    def build_loss(self, class_score_reshape, bbox_pred, anchor_data):
+        '''
+        Compute loss of a batch from a single forward pass
+    
+        Input parameters:
+            class_score_reshape: (torch.FloatTensor)
+            bbox_pred: (torch.FloatTensor)
+            anchor_data: (ndarray)
+
+        Returns:
+            cross_entropy: (torch.autograd.variable.Variable) classifcation loss
+            loss_box: (torch.autograd.variable.Variable) bbox regression loss
+
+        '''
+        # classification loss
+        class_score = class_score_reshape.permute(0, 2, 3, 1).contiguous().view(-1, 2)
+
+        anchor_label = anchor_data[0].view(-1)
+        keep = Variable(anchor_label.data.ne(-1).nonzero().squeeze()).cuda()
+        class_score = torch.index_select(class_score, 0, keep)
+        anchor_label = torch.index_select(anchor_label, 0, keep)
+
+        fg_cnt = torch.sum(anchor_label.data.ne(0))
+
+        # box loss
+        bbox_targets = anchor_data[1]
+        bbox_inside_weights = anchor_data[2]
+        bbox_outside_weights = anchor_data[3]
+        bbox_targets = torch.mul(bbox_targets, bbox_inside_weights)
+        bbox_pred = torch.mul(bbox_pred, bbox_inside_weights)
+
+        cross_entropy = F.cross_entropy(class_score,anchor_label, size_average=False)
+        loss_box = F.smooth_l1_loss(bbox_pred, bbox_targets, size_average=False) / (fg_cnt + 1e-4)
+        return cross_entropy, loss_box
+
+
+    def build_roi_loss(self, class_score, scores, anchor_inds, labels):
+        '''
+        Compute classifcation loss of specified anchor boxes
+
+        Input paramters:
+
+
+        Returns:
+            
+        '''
+
+        class_score = class_score.permute(0, 2, 3, 1)
+        bg_scores = torch.index_select(class_score,3,np_to_variable(np.arange(0,9),is_cuda=True, dtype=torch.LongTensor))
+        fg_scores = torch.index_select(class_score,3,np_to_variable(np.arange(9,18),is_cuda=True, dtype=torch.LongTensor))
+        bg_scores = bg_scores.contiguous().view(-1,1)
+        fg_scores = fg_scores.contiguous().view(-1,1)
+        class_score = torch.cat([bg_scores, fg_scores],1)
+        class_score = torch.index_select(class_score, 0, anchor_inds.view(-1))
+
+        labels = labels.view(-1)
+        roi_cross_entropy = F.cross_entropy(class_score, labels, size_average=False)
+        return roi_cross_entropy
+
+
+
+
+
+    @staticmethod
+    def reshape_layer(x, d):
+        '''
+        Reshape a tensor to have second dimension d, changing 3rd dimension
+
+        Input parameters:
+            x: (torch.autograd.variable.Variable) 
+            d: (int)
+
+        Returns:
+            (torch.autograd.variable.Variable)
+
+        '''
+
+        input_shape = x.size()
+        # b c w h
+        x = x.view(
+            input_shape[0],
+            int(d),
+            int(float(input_shape[1] * input_shape[2]) / float(d)),
+            input_shape[3]
+        )
+        return x
+
+    @staticmethod
+    def select_to_match_dimensions(a,b):
+        '''
+        Select elements from first tensor so it's size matches second tensor.
+
+        Input parameters:
+            a: (torch.autograd.variable.Variable)
+            b: (torch.autograd.variable.Variable)
+
+        Returns:
+            (torch.autograd.variable.Variable)
+        
+        '''
+
+        if a.size()[2] > b.size()[2]:
+            a = torch.index_select(a, 2, 
+                                  np_to_variable(np.arange(0,
+                                        b.size()[2]).astype(np.int32),
+                                         is_cuda=True,dtype=torch.LongTensor))
+        if a.size()[3] > b.size()[3]:
+            a = torch.index_select(a, 3, 
+                                  np_to_variable(np.arange(0,
+                                    b.size()[3]).astype(np.int32),
+                                          is_cuda=True,dtype=torch.LongTensor))
+        return a 
+
+
+    @staticmethod
+    def proposal_layer(class_prob_reshape, bbox_pred, img_info, cfg, _feat_stride, anchor_scales, gt_boxes=None):
+        '''
+        Get top scoring detections
+ 
+        Wrapper for proposal_layer_py. 
+
+        Input parameters:
+            class_prob_reshape: (torch.autograd.variable.Variable)
+            bbox_pred: (torch.autograd.variable.Variable)
+            img_info: (tuple)
+            cfg: (Config) from ../configs
+            _feat_stride:  (int)
+            anchor_scales: (list of int)
+            
+            gt_boxes (optional): (ndarray) Defatul: None
+                        
+        
+        '''
+        
+        #convert to  numpy
+        class_prob_reshape = class_prob_reshape.data.cpu().numpy()
+        bbox_pred = bbox_pred.data.cpu().numpy()
+
+        rois, scores, anchor_inds, labels = proposal_layer_py(
+                                                       class_prob_reshape,
+                                                       bbox_pred,
+                                                       img_info, cfg, 
+                                                       _feat_stride=_feat_stride,
+                                                       anchor_scales=anchor_scales,
+                                                       gt_boxes=gt_boxes)
+        #convert to pytorch
+        rois = np_to_variable(rois, is_cuda=True)
+        anchor_inds = np_to_variable(anchor_inds, is_cuda=True,
+                                                 dtype=torch.LongTensor)
+        labels = np_to_variable(labels, is_cuda=True,
+                                             dtype=torch.LongTensor)
+        scores = np_to_variable(scores, is_cuda=True)
+        return rois, scores, anchor_inds, labels
+
+
+    @staticmethod
+    def anchor_target_layer(class_score, gt_boxes, img_info,
+                            cfg, _feat_stride, anchor_scales):
+        ''' 
+        Assigns fg/bg label to anchor boxes.      
+
+
+        Input parameters:
+            class_score:  (torch.autograd.variable.Variable)
+            gt_boxes:  (ndarray)
+            img_info:  (tuple of int)
+            cfg: (Config) from ../configs
+            _feat_stride:  (int)
+            anchor_scales: (list of int)
+
+        Returns:
+            labels: (torch.autograd.variable.Variable)
+            bbox_targets: (torch.autograd.variable.Variable)
+            bbox_inside_weights:(torch.autograd.variable.Variable)
+            bbox_outside_weights:(torch.autograd.variable.Variable)
+        ''' 
+        class_score = class_score.data.cpu().numpy()
+        labels, bbox_targets, bbox_inside_weights, bbox_outside_weights = \
+            anchor_target_layer_py(class_score, gt_boxes, img_info,
+                                   cfg, _feat_stride, anchor_scales)
+
+        labels = np_to_variable(labels, is_cuda=True, dtype=torch.LongTensor)
+        bbox_targets = np_to_variable(bbox_targets, is_cuda=True)
+        bbox_inside_weights = np_to_variable(bbox_inside_weights, is_cuda=True)
+        bbox_outside_weights = np_to_variable(bbox_outside_weights, is_cuda=True)
+
+        return labels, bbox_targets, bbox_inside_weights, bbox_outside_weights
+
+    def get_features(self, img_data):
+        img_data = np_to_variable(img_data, is_cuda=True)
+        img_data = img_data.permute(0, 3, 1, 2)
+        features = self.features(img_data)
+
+        return features
+
+
+    @staticmethod
+    def get_feature_net(net_name):
+        '''
+        Get the object representing the desired feature extraction network
+
+        Note: only the part of the network considered useful for feature
+              extraction is returned. i.e. everythnig but the fully
+              connected layers of AlexNet.
+
+        Input parameters:
+            net_name: (str) the name of the desired network
+
+
+        Availble net names:
+            vgg16_bn
+            squeezenet1_1
+            resenet101
+            alexnet
+        '''
+        if net_name == 'vgg16_bn':
+            fnet = models.vgg16_bn(pretrained=False)
+            return torch.nn.Sequential(*list(fnet.features.children())[:-1]), 16, 512
+        elif net_name == 'squeezenet1_1':
+            fnet = models.squeezenet1_1(pretrained=False)
+            return torch.nn.Sequential(*list(fnet.features.children())[:-1]), 16, 512 
+        elif net_name == 'resnet101':
+            fnet = models.resnet101(pretrained=False)
+            return torch.nn.Sequential(*list(fnet.children())[:-2]), 32, 2048 
+        elif net_name == 'alexnet':
+            fnet = models.alexnet(pretrained=False)
+            return  torch.nn.Sequential(*list(fnet.features.children())), 17, 256
+        else:
+            raise NotImplementedError
+   
+    def get_embedding_conv(self,cfg):
+        '''
+        Get a Conv2D layer for the TDID embedding based on the config paprams
+
+        Input parameters:
+            cfg: (Config) from ../configs/
+        
+        '''
+        if cfg.USE_IMG_FEATS and cfg.USE_DIFF_FEATS: 
+            if cfg.USE_CC_FEATS:
+                return Conv2d(3*self.num_feature_channels,
+                                512, 3, relu=False, same_padding=True)
+            else:
+                return Conv2d(2*self.num_feature_channels,
+                                512, 3, relu=False, same_padding=True)
+        elif cfg.USE_IMG_FEATS:
+            if cfg.USE_CC_FEATS:
+                return Conv2d(2*self.num_feature_channels,
+                                512, 3, relu=False, same_padding=True)
+            else:
+                return Conv2d(self.num_feature_channels,
+                                512, 3, relu=False, same_padding=True)
+        elif cfg.USE_DIFF_FEATS:
+            if cfg.USE_CC_FEATS:
+                return Conv2d(2*self.num_feature_channels,
+                                512, 3, relu=False, same_padding=True)
+            else:
+                return Conv2d(self.num_feature_channels,
+                                512, 3, relu=False, same_padding=True)
+        else:
+            return Conv2d(self.num_feature_channels,
+                            512, 3, relu=False, same_padding=True)
+            
+class Conv2d(nn.Module):
+    '''
+        A wrapper for a 2D pytorch conv layer. 
+    '''
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, relu=True, same_padding=False, bn=False):
+        super(Conv2d, self).__init__()
+        padding = int((kernel_size - 1) / 2) if same_padding else 0
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding=padding)
+        self.bn = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0, affine=True) if bn else None
+        self.relu = nn.ReLU(inplace=True) if relu else None
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        if self.relu is not None:
+            x = self.relu(x)
+        return x
+
+def im_detect(net, target_data,im_data, im_info, features_given=True):
+    """
+    Detect single target object in a single scene image.
+    Input Parameters:
+        net: (TDID) the network
+        target_data: (torch Variable) target images
+        im_data: (torch Variable) scene_image
+        im_info: (tuple) (height,width,channels) of im_data
+        
+        features_given(optional): (bool) if true, target_data and im_data
+                                  are feature maps from net.features,
+                                  not images. Default: True
+                                    
+    Returns:
+        scores (ndarray): N x 2 array of class scores
+                          (N boxes, classes={background,target})
+        boxes (ndarray): N x 4 array of predicted bounding boxes
+    """
+
+    cls_prob, rois = net(target_data, im_data, im_info,
+                                    features_given=features_given)
+    scores = cls_prob.data.cpu().numpy()[0,:,:]
+    zs = np.zeros((scores.size, 1))
+    scores = np.concatenate((zs,scores),1)
+    boxes = rois.data.cpu().numpy()[0,:, :]
+
+    return scores, boxes
+
+'''
+import random
+def load_image():
+
+  pathToFolder = '/content/drive/My Drive/Data/SyntheticDataset/'
+
+  f=open(pathToFolder + "info.csv")
+  lines=f.readlines()
+
+  data = random.choice(lines).split("\t")
+  image_name = data[0]
+  target_name_1 = data[5]
+  target_name_2 = data[6]
+
+  pre_load_image = cv2.imread(os.path.join(pathToFolder, "Data", image_name))
+  pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
+  pre_load_target_2 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_2))
+
+  image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
+  bbox = [int(data[1]), int(data[2]), int(data[3]), int(data[4]), 1]
+  target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
+  target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
+
+  return image, bbox, target1, target2
+'''
+
+def normalize_image(img,cfg):
+    """
+    Noramlizes image according to config parameters
+    
+    ex) normalize_image(image,config)
+    Input Parameters:
+        img: (ndarray) numpy array, the image to be normalized
+        cfg: (Config) config instance from configs/
+    Returns: 
+        (ndarray) noralized image
+    """
+    if cfg.PYTORCH_FEATURE_NET:
+        return ((img/255.0) - [0.485, 0.456, 0.406])/[0.229, 0.224, 0.225]
+    else:
+        raise NotImplementedError
+
+def match_and_concat_images_list(img_list, min_size=None):
+    """
+    Stacks image in a list into a single ndarray 
+    Input parameters:
+        img_list: (list) list of ndarrays, images to be stacked. If images
+                  are not the same shape, zero padding will be used to make
+                  them the same size. 
+        min_size (optional): (int) If not None, ensures images are at least
+                             min_size x min_size. Default: None 
+    Returns:
+        (ndarray) a single ndarray with first dimension equal to the 
+        number of elements in the inputted img_list    
+    """
+    #find size all images will be
+    max_rows = 0
+    max_cols = 0
+    for img in img_list:
+        max_rows = max(img.shape[0], max_rows)
+        max_cols = max(img.shape[1], max_cols)
+    if min_size is not None:
+        max_rows = max(max_rows,min_size)
+        max_cols = max(max_cols,min_size)
+
+    #resize and stack the images
+    for il,img in enumerate(img_list):
+        resized_img = np.zeros((max_rows,max_cols,img.shape[2]))
+        resized_img[0:img.shape[0],0:img.shape[1],:] = img
+        img_list[il] = resized_img
+    return np.stack(img_list,axis=0) 
+
+def np_to_variable(np_var, is_cuda=True, dtype=torch.FloatTensor):
+    '''
+    Converts numpy array to pytorch Variable
+    Input parameters:
+        np_var: (ndarray) numpy variable
+        is_cuda (optional): (bool) If True, torch variable's .cuda() is
+                           applied. If false nothing happens. Default: True
+        dtype (optional):  (type) desired type of returned torch variable.
+                            Default: torch.FloatTensor
+    Returns:
+        (torch.autograd.Variable) a torch variable version of the np_var
+    '''
+    pytorch_var = Variable(torch.from_numpy(np_var).type(dtype))
+    if is_cuda:
+        pytorch_var = pytorch_var.cuda()
+    return pytorch_var 
+
+
+def load_net(fname, net):
+    
+    #Loads a network using h5py
+    
+    #Input parameters:
+    #    fname: (str) full path of file to load model from
+    #    net: (torch.nn.Module) network to load weights to
+    
+    h5f = h5py.File(fname, mode='r')
+    for k, v in net.state_dict().items():
+        try:
+          param = torch.from_numpy(np.asarray(h5f[k]))
+          v.copy_(param)
+        except:
+          print("error: ", k)
+
+def find_files(path, file_ending):
+  found_files = []
+  for currentpath, folders, files in os.walk(path):
+    for filename in files:
+        filepath = os.path.join(currentpath, filename)
+        if (filepath.endswith(file_ending)):
+          found_files.append(filepath)
+  return found_files
+
+import random
+def load_image():
+
+  pathToBackgrounds = '/content/drive/My Drive/ActiveVisionDataset/'
+  pathToGT = '/content/drive/My Drive/Data/GT/'
+  pathToTargets = '/content/drive/My Drive/Data/AVD_and_BigBIRD_targets_v1/'
+
+  valid_files = find_files(pathToBackgrounds, ".jpg")
+
+  while True:
+
+    chosen_image_path = random.choice(valid_files)
+    chosen_image = chosen_image_path.split("/")[-1]
+
+    json_files = find_files(pathToGT, ".json")
+    json_data = ""
+    for json_file in json_files:
+      with open(json_file, 'r') as file:
+        lines = file.readlines()
+        for line in lines:
+          json_data += line
+
+    if chosen_image in json_data:
+
+      try:
+
+        image_id = json_data.split(chosen_image)[1].split("}")[0]
+        image_id = image_id.split("id\": ")[1].split(",")[0]
+
+        data = json_data.split("\"image_id\": " + image_id)[1].split("}")[0]
+
+        bb_data = []
+        bounding_boxes_data = data.split("\"bbox\": [")[1].split("]")[0]
+        for value in bounding_boxes_data.split(","):
+          bb_data.append(int(value))
+
+        category_id = int(data.split("\"category_id\": ")[1].split(",")[0])
+
+        target_name = ""
+        with open(pathToBackgrounds + "instance_id_map.txt", 'r') as file:
+          lines = file.readlines()
+          for line in lines:
+            line = line.rstrip()
+            linesplit = line.split(" ")
+            name = linesplit[0]
+            cat_num = int(linesplit[1])
+            if cat_num == category_id:
+              target_name = name
+
+        target_paths = find_files(pathToTargets, ".jpg")
+        target_image_paths_1 = []
+        target_image_paths_2 = []
+        for target_path in target_paths:
+          if target_name in target_path:
+            if "target_0" in target_path:
+              target_image_paths_1.append(target_path) 
+            elif "target_1" in target_path:
+              target_image_paths_2.append(target_path) 
+        
+        pre_load_image = cv2.imread(chosen_image_path)
+        pre_load_target_1 = cv2.imread(random.choice(target_image_paths_1))
+        pre_load_target_2 = cv2.imread(random.choice(target_image_paths_2))
+
+        
+        image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
+        bbox = [bb_data[0], bb_data[1], bb_data[2], bb_data[3], 1]
+        target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
+        target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
+
+        return image, bbox, target1, target2
+      
+      except Exception as e:
+        print(e)
+
+import time
+def eval_images(net):
+
+  print("Start eval")
+
+  pathToBackgrounds = '/content/drive/My Drive/ActiveVisionDataset/'
+  pathToGT = '/content/drive/My Drive/Data/GT/'
+  pathToTargets = '/content/drive/My Drive/Data/AVD_and_BigBIRD_targets_v1/'
+
+  valid_files = find_files(pathToBackgrounds, ".jpg")
+  print("Files read")
+
+  score = 0
+  numOfImages = 0
+
+  while True:
+
+    chosen_image_path = random.choice(valid_files)
+    chosen_image = chosen_image_path.split("/")[-1]
+
+    json_files = find_files(pathToGT, ".json")
+    json_data = ""
+    for json_file in json_files:
+      with open(json_file, 'r') as file:
+        lines = file.readlines()
+        for line in lines:
+          json_data += line
+
+    if chosen_image in json_data:
+
+      try:
+
+        image_id = json_data.split(chosen_image)[1].split("}")[0]
+        image_id = image_id.split("id\": ")[1].split(",")[0]
+
+        data = json_data.split("\"image_id\": " + image_id)[1].split("}")[0]
+
+        bb_data = []
+        bounding_boxes_data = data.split("\"bbox\": [")[1].split("]")[0]
+        for value in bounding_boxes_data.split(","):
+          bb_data.append(int(value))
+
+        category_id = int(data.split("\"category_id\": ")[1].split(",")[0])
+
+        target_name = ""
+        with open(pathToBackgrounds + "instance_id_map.txt", 'r') as file:
+          lines = file.readlines()
+          for line in lines:
+            line = line.rstrip()
+            linesplit = line.split(" ")
+            name = linesplit[0]
+            cat_num = int(linesplit[1])
+            if cat_num == category_id:
+              target_name = name
+              break
+
+        batch_im_data = []
+        batch_target_data = []
+        batch_gt_boxes = []
+
+        target_paths = find_files(pathToTargets, ".jpg")
+        target_image_paths_1 = []
+        target_image_paths_2 = []
+        for target_path in target_paths:
+          if target_name in target_path:
+            if "target_0" in target_path:
+              target_image_paths_1.append(target_path) 
+            elif "target_1" in target_path:
+              target_image_paths_2.append(target_path) 
+        
+        pre_load_image = cv2.imread(chosen_image_path)
+        pre_load_target_1 = cv2.imread(random.choice(target_image_paths_1))
+        pre_load_target_2 = cv2.imread(random.choice(target_image_paths_2))
+
+        im_data = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
+        gt_boxes = [bb_data[0], bb_data[1], bb_data[2], bb_data[3], 1]
+        target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
+        target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
+
+        batch_im_data.append(normalize_image(im_data,cfg))
+        batch_gt_boxes.extend(gt_boxes)
+        batch_target_data.append(normalize_image(target1,cfg))
+        batch_target_data.append(normalize_image(target2,cfg))
+
+        target_data = match_and_concat_images_list(batch_target_data,
+                                                    min_size=cfg.MIN_TARGET_SIZE)
+        im_data = match_and_concat_images_list(batch_im_data)
+        gt_boxes = np.asarray(batch_gt_boxes) 
+        im_info = im_data.shape[1:]
+        im_data = np_to_variable(im_data, is_cuda=True)
+        im_data = im_data.permute(0, 3, 1, 2).contiguous()
+        target_data = np_to_variable(target_data, is_cuda=True)
+        target_data = target_data.permute(0, 3, 1, 2).contiguous()
+
+        scores, boxes = im_detect(net, target_data, im_data, im_info, features_given=False)
+
+        #torch.cuda.empty_cache()
+
+        eval_score = (boxes[0][0] - bb_data[0])**2
+        print(eval_score)
+        time.sleep(1)
+      
+      except Exception as e:
+        print(e)
+
+print("Config")
+cfg = Config()
+print("Init net")
+net = TDID(cfg)
+#net.load_state_dict(checkpoint['state_dict'], strict=False)
+#for k, v in net.state_dict().items():
+#  print(k)
+#print("Loading")
+load_net(cfg.FULL_MODEL_LOAD_DIR + cfg.FULL_MODEL_LOAD_NAME, net)
+print("Freeze batchnorms")
+net.features.eval()#freeze batchnorms layers?
+print("cuda")
+net.cuda()
+print("eval")
+net.eval()
+
+'''
+print("Data")
+batch_im_data = []
+batch_target_data = []
+batch_gt_boxes = []
+
+print("Loading image")
+im_data, gt_boxes, target1, target2 = load_image()
+
+print("Transforming image")
+batch_im_data.append(normalize_image(im_data,cfg))
+batch_gt_boxes.extend(gt_boxes)
+batch_target_data.append(normalize_image(target1,cfg))
+batch_target_data.append(normalize_image(target2,cfg))
+
+print("Internal transforming")
+target_data = match_and_concat_images_list(batch_target_data,
+                                            min_size=cfg.MIN_TARGET_SIZE)
+im_data = match_and_concat_images_list(batch_im_data)
+gt_boxes = np.asarray(batch_gt_boxes) 
+im_info = im_data.shape[1:]
+im_data = np_to_variable(im_data, is_cuda=True)
+im_data = im_data.permute(0, 3, 1, 2).contiguous()
+target_data = np_to_variable(target_data, is_cuda=True)
+target_data = target_data.permute(0, 3, 1, 2).contiguous()
+
+print("Get prediction")
+scores, boxes = im_detect(net, target_data, im_data, im_info, features_given=False)
+'''
+
+eval_images(net)
