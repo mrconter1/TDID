@@ -225,7 +225,8 @@ for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
         batch_gt_boxes = []
 
         im_data, batch_gt_boxes, target1, target2 = load_image()
-        gt_boxes = np.asarray([gt_boxes])
+        batch_gt_boxes = []
+        gt_boxes = np.asarray([[0,0,1,1,0]])
 
         batch_im_data.append(normalize_image(im_data,cfg))
         batch_gt_boxes.extend(gt_boxes)
@@ -249,6 +250,7 @@ for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
  #           loss = net.roi_cross_entropy_loss
  #       else:
  #           loss = net.loss
+        print("loss")
         loss = net.roi_cross_entropy_loss
 
         train_loss += loss.data[0]
