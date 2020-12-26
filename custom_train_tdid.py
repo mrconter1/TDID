@@ -248,7 +248,7 @@ for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
  #           loss = net.roi_cross_entropy_loss
  #       else:
  #           loss = net.loss
-        loss = net.loss
+        loss = net.roi_cross_entropy_loss
 
         train_loss += loss.data[0]
         epoch_step_cnt += 1
