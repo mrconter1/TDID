@@ -225,7 +225,7 @@ for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
         batch_gt_boxes = []
 
         im_data, batch_gt_boxes, target1, target2 = load_image()
-        gt_boxes = np.asarray([gt_boxes)
+        gt_boxes = np.asarray([gt_boxes])
 
         batch_im_data.append(normalize_image(im_data,cfg))
         batch_gt_boxes.extend(gt_boxes)
