@@ -111,11 +111,11 @@ if not os.path.exists(cfg.SNAPSHOT_SAVE_DIR):
 if not os.path.exists(cfg.META_SAVE_DIR):
     os.makedirs(cfg.META_SAVE_DIR)
 
-#put net on gpu
+print("put net on gpu")
 net.cuda()
 net.train()
 
-#setup optimizer
+print("setup optimizer")
 params = list(net.parameters())
 optimizer = torch.optim.SGD(params, lr=cfg.LEARNING_RATE,
                                     momentum=cfg.MOMENTUM, 
@@ -191,7 +191,7 @@ for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
                                       if ind not in objects_present and 
                                       ind != 0]) 
 
-            #pick a target 
+            print("pick a target")
             if ((np.random.rand() < cfg.CHOOSE_PRESENT_TARGET or 
                     not_present.shape[0]==0) and 
                     objects_present.shape[0]!=0):
@@ -231,7 +231,7 @@ for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
         batch_target_data.append(normalize_image(target1,cfg))
         batch_target_data.append(normalize_image(target2,cfg))
 
-        #prep data for input to network
+        print("prep data for input to network")
         target_data = match_and_concat_images_list(batch_target_data,
                                                    min_size=cfg.MIN_TARGET_SIZE)
         im_data = match_and_concat_images_list(batch_im_data)
@@ -242,7 +242,7 @@ for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
         target_data = np_to_variable(target_data, is_cuda=True)
         target_data = target_data.permute(0, 3, 1, 2).contiguous()
 
-        # forward
+        print("forward")
         net(target_data, im_data, im_info, gt_boxes=gt_boxes)
  #       if cfg.USE_ROI_LOSS_ONLY:
  #           loss = net.roi_cross_entropy_loss
@@ -254,13 +254,13 @@ for epoch in range(1,cfg.MAX_NUM_EPOCHS+1):
         epoch_step_cnt += 1
         epoch_loss += loss.data[0]
 
-        # backprop and parameter update
+        print("backprop and parameter update")
         optimizer.zero_grad()
         loss.backward()
         clip_gradient(net, 10.)
         optimizer.step()
 
-        #print out training info
+        print("print out training info")
         if step % cfg.DISPLAY_INTERVAL == 0:
             duration = t.toc(average=False)
             fps = step+1.0 / duration
