@@ -5,6 +5,7 @@ from model_defs.nms.nms_wrapper import nms
 import random
 from utils import *
 from evaluation.coco_det_eval import coco_det_eval 
+from model_defs.TDID import TDID
 
 import active_vision_dataset_processing.data_loading.active_vision_dataset as AVD 
 
@@ -127,10 +128,6 @@ def eval_images(net):
           print("Completed")
           break
         countDict[difficulty] += 1
-        #print("difficulty: " + str(difficulty))
-        print(countDict)
-        #print("gt_boxes[2]: " + str(gt_boxes[2]))
-        #print("gt_boxes[3]: " + str(gt_boxes[3]))
         target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
         target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
 
@@ -203,7 +200,7 @@ cfg_file = "configAVD1"
 cfg = importlib.import_module('configs.'+cfg_file)
 cfg = cfg.get_config()
 
-'''
+
 print("Init net")
 net = TDID(cfg)
 print("Loading net")
@@ -217,6 +214,3 @@ net.eval()
 
 print("Eval images")
 eval_images(net)
-'''
-
-#!python3 Object-Detection-Metrics/pascalvoc.py -t 0.5
