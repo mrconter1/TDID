@@ -56,6 +56,29 @@ def writeForPASCALVOC(path, filename, catName, data):
   with open(path + filename + ".txt", 'a') as out:
       out.write(outStr + '\n') 
 
+def load_synth_image():
+
+  pathToFolder = '/content/drive/My Drive/Data/SyntheticDataset/'
+
+  f=open(pathToFolder + "info.csv")
+  lines=f.readlines()
+
+  data = random.choice(lines).split("\t")
+  image_name = data[0]
+  target_name_1 = data[5]
+  target_name_2 = data[6]
+
+  pre_load_image = cv2.imread(os.path.join(pathToFolder, "Data", image_name))
+  pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
+  pre_load_target_2 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_2))
+
+  image = cv2.resize(pre_load_image, (1920, 1080), interpolation = cv2.INTER_AREA)
+  bbox = [int(data[1]), int(data[2]), int(data[3]), int(data[4]), 1]
+  target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
+  target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
+
+  return image, bbox, target1, target2
+
 def eval_images(net):
 
   print("Start eval")
@@ -69,14 +92,14 @@ def eval_images(net):
 
   score = 0
   numOfImages = 0
-  numToEval = 10000
+  numToEval = 100
   numCorrect = 0
   fail = 0
   corr = 0
 
   countDict = {}
   difficulties = [3]
-  perCat = 50
+  #perCat = 50
 
   while True:
 
@@ -124,6 +147,7 @@ def eval_images(net):
         batch_target_data = []
         batch_gt_boxes = []
 
+        
         target_paths = find_files(pathToTargets, ".jpg")
         target_image_paths_1 = []
         target_image_paths_2 = []
@@ -201,6 +225,10 @@ def eval_images(net):
         bb_data[2] += bb_data[0]
         bb_data[3] += bb_data[1]
 
+        #print("Data")
+        #print(fg_boxes[0])
+        #print(bb_data)
+
         for x in range(5):
 
           detection = [fg_dets[x][4], fg_dets[x][0], fg_dets[x][1], fg_dets[x][2], fg_dets[x][3]]
@@ -224,6 +252,87 @@ def eval_images(net):
   print("total:", corr+fail)
   print("Final score: " + str(numCorrect/numOfImages))
 
+def eval_synth_images(net):
+
+  score = 0
+  numOfImages = 0
+  numToEval = 100
+  iouTot = 0
+
+  while True:
+
+    try:
+
+      batch_im_data = []
+      batch_target_data = []
+      batch_gt_boxes = []
+
+      im_data, gt_boxes, target1, target2 = load_synth_image()
+
+      batch_im_data.append(normalize_image(im_data,cfg))
+      batch_gt_boxes.extend(gt_boxes)
+      batch_target_data.append(normalize_image(target1,cfg))
+      batch_target_data.append(normalize_image(target2,cfg))
+
+      #prep data for input to network
+      target_data = match_and_concat_images_list(batch_target_data,
+                                                  min_size=cfg.MIN_TARGET_SIZE)
+      im_data = match_and_concat_images_list(batch_im_data)
+      gt_boxes = np.asarray(batch_gt_boxes) 
+      im_info = im_data.shape[1:]
+      im_data = np_to_variable(im_data, is_cuda=True)
+      im_data = im_data.permute(0, 3, 1, 2).contiguous()
+      target_data = np_to_variable(target_data, is_cuda=True)
+      target_data = target_data.permute(0, 3, 1, 2).contiguous()
+      
+      print("Predicting")
+      scores, boxes = im_detect(net, target_data, im_data, im_info, features_given=False)
+
+      inds = np.where(scores[:, 1] > 0.1)[0]
+      fg_scores = scores[inds, 1]
+      fg_boxes = boxes[inds,:]
+      fg_dets = np.hstack((fg_boxes, fg_scores[:, np.newaxis])) \
+          .astype(np.float32, copy=False)
+      keep = nms(fg_dets, 0.7)
+      fg_dets = fg_dets[keep, :]
+
+      if len(fg_dets) < 5:
+        numOfImages += 1
+        print("Fail")
+        pass
+
+      gt_boxes[2] += gt_boxes[0]
+      gt_boxes[3] += gt_boxes[1]
+
+      print("Data")
+      print(fg_boxes[0])
+      print(gt_boxes)
+
+      #Hardcode cat ID
+      category_id = 1
+
+      for x in range(5):
+
+        detection = [fg_dets[x][4], fg_dets[x][0], fg_dets[x][1], fg_dets[x][2], fg_dets[x][3]]
+
+        writeForPASCALVOC("Object-Detection-Metrics/detections/", fileName, str(category_id), detection)
+        writeForPASCALVOC("Object-Detection-Metrics/groundtruths/", fileName, str(category_id), gt_boxes)
+
+      numOfImages += 1
+      print("Number evaluated: " + str(numOfImages))
+      
+      if numOfImages >= numToEval:
+        break
+    
+    except Exception as e:
+      print(e)
+      pass
+
+  print("tot" + str(iouTot))
+  print("Final score: " + str(iouTot/numOfImages))
+
+###
+
 print("Config")
 cfg_file = "configAVD1"
 cfg = importlib.import_module('configs.'+cfg_file)
@@ -241,4 +350,4 @@ print("eval")
 net.eval()
 
 print("Eval images")
-eval_images(net)
+eval_synth_images(net)
