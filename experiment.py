@@ -12,6 +12,43 @@ import active_vision_dataset_processing.data_loading.active_vision_dataset as AV
 fileName = str(random.randint(0, 1000000))
 print("Filename: " + fileName)
 
+def im_detect(net, target_data,im_data, im_info, features_given=True):
+    """
+    Detect single target object in a single scene image.
+    Input Parameters:
+        net: (TDID) the network
+        target_data: (torch Variable) target images
+        im_data: (torch Variable) scene_image
+        im_info: (tuple) (height,width,channels) of im_data
+        
+        features_given(optional): (bool) if true, target_data and im_data
+                                  are feature maps from net.features,
+                                  not images. Default: True
+                                    
+    Returns:
+        scores (ndarray): N x 2 array of class scores
+                          (N boxes, classes={background,target})
+        boxes (ndarray): N x 4 array of predicted bounding boxes
+    """
+
+    cls_prob, rois = net(target_data, im_data, im_info,
+                                    features_given=features_given)
+    scores = cls_prob.data.cpu().numpy()[0,:,:]
+    zs = np.zeros((scores.size, 1))
+    scores = np.concatenate((zs,scores),1)
+    boxes = rois.data.cpu().numpy()[0,:, :]
+
+    return scores, boxes
+
+def find_files(path, file_ending):
+  found_files = []
+  for currentpath, folders, files in os.walk(path):
+    for filename in files:
+        filepath = os.path.join(currentpath, filename)
+        if (filepath.endswith(file_ending)):
+          found_files.append(filepath)
+  return found_files
+
 def writeForPASCALVOC(path, filename, catName, data):
   outStr = catName + " "
   for i in range(len(data)):
@@ -38,7 +75,7 @@ def eval_images(net):
   corr = 0
 
   countDict = {}
-  difficulties = [2,3,4]
+  difficulties = [3]
   perCat = 50
 
   while True:
@@ -171,14 +208,6 @@ def eval_images(net):
           writeForPASCALVOC("Object-Detection-Metrics/detections/", fileName, str(category_id), detection)
           writeForPASCALVOC("Object-Detection-Metrics/groundtruths/", fileName, str(category_id), bb_data)
 
-        iou = get_iou(fg_dets[0], bb_data)
-        print("iou: " + str(iou))
-        if iou > 0.5:
-          numCorrect += 1
-          corr += 1
-        else: 
-          fail += 1
-
         numOfImages += 1
         print("Number evaluated: " + str(numOfImages))
         
@@ -199,7 +228,6 @@ print("Config")
 cfg_file = "configAVD1"
 cfg = importlib.import_module('configs.'+cfg_file)
 cfg = cfg.get_config()
-
 
 print("Init net")
 net = TDID(cfg)
