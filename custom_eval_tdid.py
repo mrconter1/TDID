@@ -1,8 +1,12 @@
 import time
 import numpy as np
-#from nms_wrapper import nms
+import importlib
 from model_defs.nms.nms_wrapper import nms
 import random
+from utils import *
+from evaluation.coco_det_eval import coco_det_eval 
+
+import active_vision_dataset_processing.data_loading.active_vision_dataset as AVD 
 
 fileName = str(random.randint(0, 1000000))
 print("Filename: " + fileName)
@@ -195,7 +199,11 @@ def eval_images(net):
   print("Final score: " + str(numCorrect/numOfImages))
 
 print("Config")
-cfg = Config()
+cfg_file = "configAVD1"
+cfg = importlib.import_module('configs.'+cfg_file)
+cfg = cfg.get_config()
+
+'''
 print("Init net")
 net = TDID(cfg)
 print("Loading net")
@@ -209,5 +217,6 @@ net.eval()
 
 print("Eval images")
 eval_images(net)
+'''
 
-!python3 Object-Detection-Metrics/pascalvoc.py -t 0.5
+#!python3 Object-Detection-Metrics/pascalvoc.py -t 0.5
