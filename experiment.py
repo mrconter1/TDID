@@ -285,7 +285,6 @@ def eval_synth_images(net):
       target_data = np_to_variable(target_data, is_cuda=True)
       target_data = target_data.permute(0, 3, 1, 2).contiguous()
       
-      print("Predicting")
       scores, boxes = im_detect(net, target_data, im_data, im_info, features_given=False)
 
       inds = np.where(scores[:, 1] > 0.1)[0]
@@ -304,11 +303,8 @@ def eval_synth_images(net):
       gt_boxes[2] += gt_boxes[0]
       gt_boxes[3] += gt_boxes[1]
 
-      print("Data")
-      print(fg_boxes[0])
-      print(gt_boxes)
 
-      #Hardcode cat ID
+     #Hardcode cat ID
       category_id = 1
 
       for x in range(5):
@@ -327,9 +323,6 @@ def eval_synth_images(net):
     except Exception as e:
       print(e)
       pass
-
-  print("tot" + str(iouTot))
-  print("Final score: " + str(iouTot/numOfImages))
 
 ###
 
@@ -353,8 +346,9 @@ net.features.eval()#freeze batchnorms layers?
 print("cuda")
 net.cuda()
 
-print("eval")
+print("train")
 net.train()
+
 
 params = list(net.parameters())
 optimizer = torch.optim.SGD(params, lr=cfg.LEARNING_RATE,
@@ -421,8 +415,10 @@ if trainFirst:
     print("Numbers trained: " + str(i))
     print("")
 
-    if (loss.data[0] < 0.1):
+    if (loss.data[0] < 0.01):
       break
 
+
 print("Eval images")
+net.eval()
 eval_synth_images(net)
