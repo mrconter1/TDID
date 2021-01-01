@@ -333,6 +333,8 @@ def eval_synth_images(net):
 
 ###
 
+loadNet = False
+
 print("Config")
 cfg_file = "configAVD1"
 cfg = importlib.import_module('configs.'+cfg_file)
@@ -341,13 +343,16 @@ cfg = cfg.get_config()
 print("Init net")
 net = TDID(cfg)
 print("Loading net")
-#load_net(cfg.FULL_MODEL_LOAD_DIR + cfg.FULL_MODEL_LOAD_NAME, net)
-weights_normal_init(net, dev=0.01)
-net.features = load_pretrained_weights(cfg.FEATURE_NET_NAME) 
+if loadNet:
+  load_net(cfg.FULL_MODEL_LOAD_DIR + cfg.FULL_MODEL_LOAD_NAME, net)
+else:
+  weights_normal_init(net, dev=0.01)
+  net.features = load_pretrained_weights(cfg.FEATURE_NET_NAME) 
 print("Freeze batchnorms")
 net.features.eval()#freeze batchnorms layers?
 print("cuda")
 net.cuda()
+
 print("eval")
 net.train()
 
@@ -358,9 +363,9 @@ optimizer = torch.optim.SGD(params, lr=cfg.LEARNING_RATE,
 
 trainFirst = True
 verbose = False
-numToTrainOn = 100
+numToTrainOn = 250
 
-batchSize = 1
+batchSize = 2
 
 if trainFirst:
 
@@ -382,13 +387,9 @@ if trainFirst:
 
       gt_boxes[2] += gt_boxes[0]
       gt_boxes[3] += gt_boxes[1]
-      gt_boxes = [gt_boxes[0], gt_boxes[1], gt_boxes[2], gt_boxes[3]]
 
       gt_boxes = np.asarray([[gt_boxes[0],gt_boxes[1],gt_boxes[2],gt_boxes[3],1]])
 
-      print(gt_boxes)
-
-      print("Appending data")
       batch_im_data.append(normalize_image(im_data,cfg))
       batch_gt_boxes.extend(gt_boxes)
       batch_target_data.append(normalize_image(target1,cfg))
@@ -404,8 +405,6 @@ if trainFirst:
     target_data = np_to_variable(target_data, is_cuda=True)
     target_data = target_data.permute(0, 3, 1, 2).contiguous()
 
-    if verbose:
-      print("forward")
     net(target_data, im_data, im_info, gt_boxes=gt_boxes)
     loss = net.roi_cross_entropy_loss
 
@@ -420,6 +419,10 @@ if trainFirst:
 
     print("loss: " + str(loss.data[0]))
     print("Numbers trained: " + str(i))
+    print("")
+
+    if (loss.data[0] < 0.1):
+      break
 
 print("Eval images")
-#eval_synth_images(net)
+eval_synth_images(net)
