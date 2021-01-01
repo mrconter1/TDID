@@ -341,13 +341,85 @@ cfg = cfg.get_config()
 print("Init net")
 net = TDID(cfg)
 print("Loading net")
-load_net(cfg.FULL_MODEL_LOAD_DIR + cfg.FULL_MODEL_LOAD_NAME, net)
+#load_net(cfg.FULL_MODEL_LOAD_DIR + cfg.FULL_MODEL_LOAD_NAME, net)
+weights_normal_init(net, dev=0.01)
+net.features = load_pretrained_weights(cfg.FEATURE_NET_NAME) 
 print("Freeze batchnorms")
 net.features.eval()#freeze batchnorms layers?
 print("cuda")
 net.cuda()
 print("eval")
-net.eval()
+net.train()
+
+params = list(net.parameters())
+optimizer = torch.optim.SGD(params, lr=cfg.LEARNING_RATE,
+                                    momentum=cfg.MOMENTUM, 
+                                    weight_decay=cfg.WEIGHT_DECAY)
+
+trainFirst = True
+verbose = False
+numToTrainOn = 100
+
+batchSize = 1
+
+if trainFirst:
+
+  train_loss = 0
+  epoch_loss = 0
+  epoch_step_cnt = 0
+
+  for i in range(numToTrainOn):
+
+    batch_im_data = []
+    batch_target_data = []
+    batch_gt_boxes = []
+
+    for j in range(batchSize):
+
+      if verbose:
+        print("Loading image")
+      im_data, gt_boxes, target1, target2 = load_synth_image()
+
+      gt_boxes[2] += gt_boxes[0]
+      gt_boxes[3] += gt_boxes[1]
+      gt_boxes = [gt_boxes[0], gt_boxes[1], gt_boxes[2], gt_boxes[3]]
+
+      gt_boxes = np.asarray([[gt_boxes[0],gt_boxes[1],gt_boxes[2],gt_boxes[3],1]])
+
+      print(gt_boxes)
+
+      print("Appending data")
+      batch_im_data.append(normalize_image(im_data,cfg))
+      batch_gt_boxes.extend(gt_boxes)
+      batch_target_data.append(normalize_image(target1,cfg))
+      batch_target_data.append(normalize_image(target2,cfg))
+
+    target_data = match_and_concat_images_list(batch_target_data,
+                                                min_size=cfg.MIN_TARGET_SIZE)
+    im_data = match_and_concat_images_list(batch_im_data)
+    gt_boxes = np.asarray(batch_gt_boxes)
+    im_info = im_data.shape[1:]
+    im_data = np_to_variable(im_data, is_cuda=True)
+    im_data = im_data.permute(0, 3, 1, 2).contiguous()
+    target_data = np_to_variable(target_data, is_cuda=True)
+    target_data = target_data.permute(0, 3, 1, 2).contiguous()
+
+    if verbose:
+      print("forward")
+    net(target_data, im_data, im_info, gt_boxes=gt_boxes)
+    loss = net.roi_cross_entropy_loss
+
+    optimizer.zero_grad()
+    loss.backward()
+    clip_gradient(net, 10.)
+    optimizer.step()
+
+    train_loss += loss.data[0]
+    epoch_step_cnt += 1
+    epoch_loss += loss.data[0]
+
+    print("loss: " + str(loss.data[0]))
+    print("Numbers trained: " + str(i))
 
 print("Eval images")
-eval_synth_images(net)
+#eval_synth_images(net)
