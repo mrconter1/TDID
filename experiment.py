@@ -1,11 +1,15 @@
 import time
 import numpy as np
 import importlib
+from PIL import Image
 from model_defs.nms.nms_wrapper import nms
 import random
 from utils import *
 from evaluation.coco_det_eval import coco_det_eval 
 from model_defs.TDID import TDID
+
+from matplotlib import pyplot as plt
+from matplotlib.patches import Rectangle
 
 import active_vision_dataset_processing.data_loading.active_vision_dataset as AVD 
 
@@ -62,13 +66,15 @@ def load_synth_image():
 
   f=open(pathToFolder + "info.csv")
   lines=f.readlines()
+  print("num of data: " + str(len(lines)))
 
   data = random.choice(lines).split("\t")
   image_name = data[0]
   target_name_1 = data[5]
   target_name_2 = data[6]
 
-  pre_load_image = cv2.imread(os.path.join(pathToFolder, "Data", image_name))
+  image_path = os.path.join(pathToFolder, "Data", image_name)
+  pre_load_image = cv2.imread(image_path)
   pre_load_target_1 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_1))
   pre_load_target_2 = cv2.imread(os.path.join(pathToFolder, "Data", target_name_2))
 
@@ -77,7 +83,7 @@ def load_synth_image():
   target1 = cv2.resize(pre_load_target_1, (80, 80), interpolation = cv2.INTER_AREA)
   target2 = cv2.resize(pre_load_target_2, (80, 80), interpolation = cv2.INTER_AREA)
 
-  return image, bbox, target1, target2
+  return image, bbox, target1, target2, image_path
 
 def eval_images(net):
 
@@ -267,7 +273,16 @@ def eval_synth_images(net):
       batch_target_data = []
       batch_gt_boxes = []
 
-      im_data, gt_boxes, target1, target2 = load_synth_image()
+      im_data, gt_boxes, target1, target2, image_path = load_synth_image()
+
+      gt_boxes[2] += gt_boxes[0]
+      gt_boxes[3] += gt_boxes[1]
+      
+      gt = []
+      gt.append(gt_boxes[0])
+      gt.append(gt_boxes[1])
+      gt.append(gt_boxes[2])
+      gt.append(gt_boxes[3])
 
       batch_im_data.append(normalize_image(im_data,cfg))
       batch_gt_boxes.extend(gt_boxes)
@@ -287,24 +302,58 @@ def eval_synth_images(net):
       
       scores, boxes = im_detect(net, target_data, im_data, im_info, features_given=False)
 
+      print("box 0")
+      print(boxes[0])
+      print(scores[0])
+      print("box 2")
+      print(boxes[2])
+      print(scores[2])
+      print("box 50")
+      print(boxes[50])
+      print(scores[50])
+
+      print(len(boxes))
       inds = np.where(scores[:, 1] > 0.1)[0]
       fg_scores = scores[inds, 1]
       fg_boxes = boxes[inds,:]
+      print(len(fg_boxes))
       fg_dets = np.hstack((fg_boxes, fg_scores[:, np.newaxis])) \
           .astype(np.float32, copy=False)
       keep = nms(fg_dets, 0.7)
       fg_dets = fg_dets[keep, :]
+      print(len(fg_dets))
+      print(fg_dets[0][4])
 
       if len(fg_dets) < 5:
-        numOfImages += 1
-        print("Fail")
-        pass
+        continue
 
-      gt_boxes[2] += gt_boxes[0]
-      gt_boxes[3] += gt_boxes[1]
+      im = np.array(Image.open(image_path), dtype=np.uint8)
+      fig,ax = plt.subplots(1)
+      ax.imshow(im)
+      for i in range(len(fg_dets)-1, 0, -1):
+        x1, y1, x2, y2 = fg_dets[i][0], fg_dets[i][1], fg_dets[i][2], fg_dets[i][3]
+        col = fg_dets[i][4]**2
+        ax.add_patch(Rectangle((x1, y1), x2-x1, y2-y1, fill=None, alpha=1, edgecolor=(1, 1-col, 1-col)))
+      print("draw")
+      x1, y1, x2, y2 = gt[0], gt[1], gt[2], gt[3]
+      ax.add_patch(Rectangle((x1, y1), x2-x1, y2-y1, fill=None, alpha=1, edgecolor='b'))
+      plt.savefig("1.png")
 
+      im = np.array(Image.open(image_path), dtype=np.uint8)
+      fig,ax = plt.subplots(1)
+      ax.imshow(im)
+      for i in range(5):
+        x1, y1, x2, y2 = fg_dets[i][0], fg_dets[i][1], fg_dets[i][2], fg_dets[i][3]
+        col = fg_dets[i][4]**2
+        ax.add_patch(Rectangle((x1, y1), x2-x1, y2-y1, fill=None, alpha=1, edgecolor=(1, 1-col, 1-col)))
+      print("draw")
+      x1, y1, x2, y2 = gt[0], gt[1], gt[2], gt[3]
+      ax.add_patch(Rectangle((x1, y1), x2-x1, y2-y1, fill=None, alpha=1, edgecolor='b'))
+      plt.savefig("2.png")
 
-     #Hardcode cat ID
+      input("wait")
+
+      #Hardcode cat ID
       category_id = 1
 
       for x in range(5):
@@ -312,7 +361,7 @@ def eval_synth_images(net):
         detection = [fg_dets[x][4], fg_dets[x][0], fg_dets[x][1], fg_dets[x][2], fg_dets[x][3]]
 
         writeForPASCALVOC("Object-Detection-Metrics/detections/", fileName, str(category_id), detection)
-        writeForPASCALVOC("Object-Detection-Metrics/groundtruths/", fileName, str(category_id), gt_boxes)
+        writeForPASCALVOC("Object-Detection-Metrics/groundtruths/", fileName, str(category_id), gt)
 
       numOfImages += 1
       print("Number evaluated: " + str(numOfImages))
@@ -349,7 +398,6 @@ net.cuda()
 print("train")
 net.train()
 
-
 params = list(net.parameters())
 optimizer = torch.optim.SGD(params, lr=cfg.LEARNING_RATE,
                                     momentum=cfg.MOMENTUM, 
@@ -357,7 +405,7 @@ optimizer = torch.optim.SGD(params, lr=cfg.LEARNING_RATE,
 
 trainFirst = True
 verbose = False
-numToTrainOn = 250
+numToTrainOn = 500
 
 batchSize = 2
 
@@ -377,7 +425,7 @@ if trainFirst:
 
       if verbose:
         print("Loading image")
-      im_data, gt_boxes, target1, target2 = load_synth_image()
+      im_data, gt_boxes, target1, target2, image_path = load_synth_image()
 
       gt_boxes[2] += gt_boxes[0]
       gt_boxes[3] += gt_boxes[1]
@@ -400,7 +448,7 @@ if trainFirst:
     target_data = target_data.permute(0, 3, 1, 2).contiguous()
 
     net(target_data, im_data, im_info, gt_boxes=gt_boxes)
-    loss = net.roi_cross_entropy_loss
+    loss = net.loss
 
     optimizer.zero_grad()
     loss.backward()
@@ -415,9 +463,8 @@ if trainFirst:
     print("Numbers trained: " + str(i))
     print("")
 
-    if (loss.data[0] < 0.01):
+    if (loss.data[0] < 0.1):
       break
-
 
 print("Eval images")
 net.eval()
