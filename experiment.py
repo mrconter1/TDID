@@ -66,7 +66,7 @@ def load_synth_image():
 
   f=open(pathToFolder + "info.csv")
   lines=f.readlines()
-  print("num of data: " + str(len(lines)))
+  #print("num of data: " + str(len(lines)))
 
   data = random.choice(lines).split("\t")
   image_name = data[0]
