@@ -98,7 +98,7 @@ def eval_images(net):
 
   score = 0
   numOfImages = 0
-  numToEval = 100
+  numToEval = 250
   numCorrect = 0
   fail = 0
   corr = 0
@@ -262,7 +262,7 @@ def eval_synth_images(net):
 
   score = 0
   numOfImages = 0
-  numToEval = 100
+  numToEval = 250
   iouTot = 0
 
   while True:
@@ -327,6 +327,7 @@ def eval_synth_images(net):
       if len(fg_dets) < 5:
         continue
 
+      '''
       im = np.array(Image.open(image_path), dtype=np.uint8)
       fig,ax = plt.subplots(1)
       ax.imshow(im)
@@ -352,6 +353,7 @@ def eval_synth_images(net):
       plt.savefig("2.png")
 
       input("wait")
+      '''
 
       #Hardcode cat ID
       category_id = 1
@@ -409,6 +411,9 @@ numToTrainOn = 500
 
 batchSize = 2
 
+xList = []
+lossList = []
+
 if trainFirst:
 
   train_loss = 0
@@ -449,6 +454,14 @@ if trainFirst:
 
     net(target_data, im_data, im_info, gt_boxes=gt_boxes)
     loss = net.loss
+
+    xList.append(i)
+    lossList.append(loss.data[0])
+
+    fig, ax = plt.subplots( nrows=1, ncols=1 )  # create figure & 1 axis
+    ax.plot(xList, lossList)
+    fig.savefig('loss.png')   # save the figure to file
+    plt.close(fig) 
 
     optimizer.zero_grad()
     loss.backward()
