@@ -405,6 +405,10 @@ if train:
       fig.savefig('test.png')  
       plt.close(fig) 
 
+    if accListY[-1] > 10:
+      params = list(net.parameters())
+      optimizer = torch.optim.SGD(params, lr=0.00001, momentum=0.9, weight_decay=0.005)
+
     print("Iteration: " + str(x))
     print("Current train loss:\t" + str(trainLossListY[-1]))
     print("Current val loss:\t" + str(valLossListY[-1]))
