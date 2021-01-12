@@ -184,9 +184,6 @@ def load_image(valid_files, training):
   
   return image, bbox, target1, target2, chosen_image_path, category_id
 
-def getMilli():
-  return int(round(time.time() * 1000))
-
 ###
 import subprocess
 import time
@@ -225,7 +222,7 @@ if train:
   numToTrainOn = 100000
   updateInterval = 250
   numToAvg = 50
-  batchSize = 1
+  batchSize = 2
 
   params = list(net.parameters())
 
@@ -405,7 +402,7 @@ if train:
       fig.savefig('test.png')  
       plt.close(fig) 
 
-    if accListY[-1] > 10:
+    if accListY[-1] > 15:
       params = list(net.parameters())
       optimizer = torch.optim.SGD(params, lr=0.00001, momentum=0.9, weight_decay=0.005)
 
