@@ -223,8 +223,8 @@ if train:
 
   #Train
   numToTrainOn = 100000
-  updateInterval = 5
-  numToAvg = 10
+  updateInterval = 250
+  numToAvg = 50
   batchSize = 1
 
   params = list(net.parameters())
