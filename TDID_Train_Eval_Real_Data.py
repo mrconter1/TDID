@@ -14,6 +14,10 @@ import subprocess
 
 import active_vision_dataset_processing.data_loading.active_vision_dataset as AVD 
 
+def strToNum(s):
+  hashed = abs(hash(s)) % (1000)
+  return hashed
+
 fileName = str(random.randint(0, 1000000))
 print("Filename: " + fileName)
 
@@ -61,7 +65,7 @@ def writeForPASCALVOC(path, filename, catName, data):
   with open(path + filename + ".txt", 'a') as out:
       out.write(outStr + '\n') 
 
-def load_synth_image(train):
+def load_synth_image(training):
 
   pathToFolder = '/content/drive/My Drive/Data/SyntheticDataset_new/'
 
@@ -69,14 +73,10 @@ def load_synth_image(train):
 
   lines=f.readlines()
   trainRatio = 0.6
-  #print("Total lines: " + str(len(lines)))
   if train:
     lines=lines[:int(len(lines)*trainRatio)]
-    #print("Total train lines: " + str(len(lines)))
   else:
     lines=lines[int(len(lines)*trainRatio):]
-    #print("Total val lines: " + str(len(lines)))
-  #print("")
 
   Fail = True
   while Fail:
@@ -100,7 +100,10 @@ def load_synth_image(train):
     except:
       Fail = True
 
-  return image, bbox, target1, target2, image_path
+  target = target_name_1.split("0")[0]
+  category_id = strToNum(target)
+
+  return image, bbox, target1, target2, image_path, category_id
 
 def load_image(valid_files, training):
 
@@ -181,6 +184,9 @@ def load_image(valid_files, training):
     except:
 
       continue
+
+  target = target_image_paths_1[0].split('/')[-1].split('.')[0][:-2]
+  category_id = strToNum(target)
   
   return image, bbox, target1, target2, chosen_image_path, category_id
 
@@ -190,6 +196,7 @@ import time
 
 loadNet = False
 train = True
+data_type = 'synthetic' #'synthetic' or 'AVD'
 
 print("Config")
 cfg_file = "configAVD1"
@@ -252,7 +259,10 @@ if train:
 
     for j in range(batchSize):
 
-      im_data, gt_boxes, target1, target2, image_path, category_id = load_image(valid_files, training = True)
+      if data_type == 'AVD':
+        im_data, gt_boxes, target1, target2, image_path, category_id = load_image(valid_files, training = True)
+      else:
+        im_data, gt_boxes, target1, target2, image_path, category_id = load_synth_image(training = True)
     
       target1 = augment_image(target1, do_illum=cfg.AUGMENT_TARGET_ILLUMINATION)
       target2 = augment_image(target2, do_illum=cfg.AUGMENT_TARGET_ILLUMINATION)
@@ -301,7 +311,10 @@ if train:
 
         for j in range(batchSize):
 
-          im_data, gt_boxes, target1, target2, image_path, category_id = load_image(valid_files, training = False)
+          if data_type == 'AVD':
+            im_data, gt_boxes, target1, target2, image_path, category_id = load_image(valid_files, training = False)
+          else:
+            im_data, gt_boxes, target1, target2, image_path, category_id = load_synth_image(training = False)
 
           target1 = augment_image(target1, do_illum=cfg.AUGMENT_TARGET_ILLUMINATION)
           target2 = augment_image(target2, do_illum=cfg.AUGMENT_TARGET_ILLUMINATION)
@@ -338,7 +351,10 @@ if train:
         batch_target_data = []
         batch_gt_boxes = []
 
-        im_data, gt_boxes, target1, target2, image_path, category_id = load_image(valid_files, training = False)
+        if data_type == 'AVD':
+          im_data, gt_boxes, target1, target2, image_path, category_id = load_image(valid_files, training = False)
+        else:
+          im_data, gt_boxes, target1, target2, image_path, category_id = load_synth_image(training = False)
 
         batch_im_data.append(normalize_image(im_data,cfg))
         batch_gt_boxes.extend(gt_boxes)
