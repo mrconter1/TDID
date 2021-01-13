@@ -67,7 +67,7 @@ def writeForPASCALVOC(path, filename, catName, data):
 
 def load_synth_image(training):
 
-  pathToFolder = '/content/drive/My Drive/Data/SyntheticDataset_new/'
+  pathToFolder = '/content/drive/My Drive/Data/SyntheticDataset_fewer_objects/'
 
   f=open(pathToFolder + "info.csv")
 
@@ -84,8 +84,9 @@ def load_synth_image(training):
     try:
       data = random.choice(lines).split("\t")
       image_name = data[0]
-      target_name_1 = data[5]
-      target_name_2 = data[6]
+      category_id = data[5]
+      target_name_1 = data[6]
+      target_name_2 = data[7]
 
       image_path = os.path.join(pathToFolder, "Data", image_name)
       pre_load_image = cv2.imread(image_path)
@@ -99,9 +100,6 @@ def load_synth_image(training):
       Fail = False
     except:
       Fail = True
-
-  target = target_name_1.split("0")[0]
-  category_id = strToNum(target)
 
   return image, bbox, target1, target2, image_path, category_id
 
