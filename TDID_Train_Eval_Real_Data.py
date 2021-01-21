@@ -189,12 +189,28 @@ def load_image(valid_files, training):
   return image, bbox, target1, target2, chosen_image_path, category_id
 
 ###
+from os import listdir
+from os.path import isfile, join
 import subprocess
 import time
 
+#Parameters
+experimentName = "NewTest"
 loadNet = False
 train = True
 data_type = 'synthetic' #'synthetic' or 'AVD'
+numToTrainOn = 100000
+updateInterval = 10
+numToAvg = 10
+batchSize = 1
+
+#Dictionary containing APs for each category
+APDict = {}
+countDict = {}
+
+#Create experiment folder
+exPath = "/content/drive/MyDrive/Data/Experiments/"+experimentName+"/"
+os.system("mkdir " + exPath)
 
 print("Config")
 cfg_file = "configAVD1"
@@ -222,12 +238,6 @@ valid_files = find_files(pathToBackgrounds, ".jpg")
 if train:
 
   net.train()
-
-  #Train
-  numToTrainOn = 100000
-  updateInterval = 250
-  numToAvg = 50
-  batchSize = 2
 
   params = list(net.parameters())
 
@@ -261,6 +271,11 @@ if train:
         im_data, gt_boxes, target1, target2, image_path, category_id = load_image(valid_files, training = True)
       else:
         im_data, gt_boxes, target1, target2, image_path, category_id = load_synth_image(training = True)
+
+      if category_id not in countDict:
+        countDict[category_id] = 0
+      else:
+        countDict[category_id] += 1
     
       target1 = augment_image(target1, do_illum=cfg.AUGMENT_TARGET_ILLUMINATION)
       target2 = augment_image(target2, do_illum=cfg.AUGMENT_TARGET_ILLUMINATION)
@@ -313,6 +328,12 @@ if train:
             im_data, gt_boxes, target1, target2, image_path, category_id = load_image(valid_files, training = False)
           else:
             im_data, gt_boxes, target1, target2, image_path, category_id = load_synth_image(training = False)
+
+          #Save one image from each category
+          files = [f for f in listdir(exPath) if isfile(join(exPath, f))]
+          name = category_id+".png"
+          if name not in files:
+            cv2.imwrite(exPath + name, target1)
 
           target1 = augment_image(target1, do_illum=cfg.AUGMENT_TARGET_ILLUMINATION)
           target2 = augment_image(target2, do_illum=cfg.AUGMENT_TARGET_ILLUMINATION)
@@ -397,9 +418,33 @@ if train:
         mAP = float(data.split('\n')[-2].split(' ')[1][:-2])
         accListX.append(x)
         accListY.append(mAP)
-      except:
+        for line in data.split('\n'):
+          if line.startswith("AP:"):
+            AP = float(line.split(' ')[1].split('%')[0])
+            ID = line.split('(')[1].split(')')[0]
+            if ID not in APDict:
+              APDict[ID] = [AP]
+            else:
+              APDict[ID].append(AP)
+
+        fig, ax1 = plt.subplots( nrows=1, ncols=1 ) 
+        for key, value in APDict.iteritems():
+          value.extend([value[-1]]*(len(accListX)-len(value)))
+          ax1.plot(accListX, value, label="Class: "+key)
+        ax1.set_ylim(bottom=0)
+        ax1.legend(loc='upper right')
+        fig.savefig(exPath+'APs.png')  
+        plt.close(fig)
+
+      except Exception as e:
+        print(e)
         accListX.append(x)
         accListY.append(0)
+
+      cats = list(countDict.keys()) 
+      count = list(countDict.values()) 
+      plt.bar(cats, count) 
+      plt.savefig(exPath+'distribution.png')
 
       valLossListX.append(x)
       valLossListY.append(round(sum(valList)/float(len(valList)),2))
@@ -413,7 +458,7 @@ if train:
       ax2.plot(accListX, accListY, label="Accuracy mAP (%)", color="blue")
       ax2.set_ylim(bottom=0)
       ax2.legend(loc='upper left')
-      fig.savefig('test.png')  
+      fig.savefig(exPath+'average.png')  
       plt.close(fig) 
 
     if accListY[-1] > 15:
