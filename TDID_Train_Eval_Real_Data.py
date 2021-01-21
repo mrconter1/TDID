@@ -200,8 +200,8 @@ loadNet = False
 train = True
 data_type = 'synthetic' #'synthetic' or 'AVD'
 numToTrainOn = 100000
-updateInterval = 10
-numToAvg = 10
+updateInterval = 5
+numToAvg = 5
 batchSize = 1
 
 #Dictionary containing APs for each category
@@ -272,10 +272,10 @@ if train:
       else:
         im_data, gt_boxes, target1, target2, image_path, category_id = load_synth_image(training = True)
 
-      if category_id not in countDict:
-        countDict[category_id] = 0
+      if str(category_id) not in countDict:
+        countDict[str(category_id)] = 0
       else:
-        countDict[category_id] += 1
+        countDict[str(category_id)] += 1
     
       target1 = augment_image(target1, do_illum=cfg.AUGMENT_TARGET_ILLUMINATION)
       target2 = augment_image(target2, do_illum=cfg.AUGMENT_TARGET_ILLUMINATION)
@@ -432,7 +432,7 @@ if train:
           value.extend([value[-1]]*(len(accListX)-len(value)))
           ax1.plot(accListX, value, label="Class: "+key)
         ax1.set_ylim(bottom=0)
-        ax1.legend(loc='upper right')
+        ax1.legend(bbox_to_anchor=(1, 0.5), loc='upper right')
         fig.savefig(exPath+'APs.png')  
         plt.close(fig)
 
