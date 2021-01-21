@@ -195,13 +195,13 @@ import subprocess
 import time
 
 #Parameters
-experimentName = "NewTest"
+experimentName = "TrainOnReal_EvalOnReal_Average_50_BatchSize_2"
 loadNet = False
 train = True
 data_type = 'synthetic' #'synthetic' or 'AVD'
 numToTrainOn = 100000
-updateInterval = 5
-numToAvg = 5
+updateInterval = 250
+numToAvg = 50
 batchSize = 1
 
 #Dictionary containing APs for each category
@@ -427,14 +427,16 @@ if train:
             else:
               APDict[ID].append(AP)
 
-        fig, ax1 = plt.subplots( nrows=1, ncols=1 ) 
+        fig = plt.figure(figsize=(5,7))
+        ax  = fig.add_subplot(111)
+
+        ax.set_position([0.1,0.1,0.5,0.8])
         for key, value in APDict.iteritems():
           value.extend([value[-1]]*(len(accListX)-len(value)))
-          ax1.plot(accListX, value, label="Class: "+key)
-        ax1.set_ylim(bottom=0)
-        ax1.legend(bbox_to_anchor=(1, 0.5), loc='upper right')
+          ax.plot(accListX, value, label="Category: "+key)
+        leg = ax.legend(loc = 'center left', bbox_to_anchor = (1.0, 0.5))
+        ax.set_ylim(bottom=0)
         fig.savefig(exPath+'APs.png')  
-        plt.close(fig)
 
       except Exception as e:
         print(e)
@@ -444,6 +446,7 @@ if train:
       cats = list(countDict.keys()) 
       count = list(countDict.values()) 
       plt.bar(cats, count) 
+      plt.xticks(rotation='vertical')
       plt.savefig(exPath+'distribution.png')
 
       valLossListX.append(x)
