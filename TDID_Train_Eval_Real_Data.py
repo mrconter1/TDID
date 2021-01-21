@@ -202,7 +202,7 @@ data_type = 'synthetic' #'synthetic' or 'AVD'
 numToTrainOn = 100000
 updateInterval = 250
 numToAvg = 50
-batchSize = 1
+batchSize = 2
 
 #Dictionary containing APs for each category
 APDict = {}
@@ -437,6 +437,7 @@ if train:
         leg = ax.legend(loc = 'center left', bbox_to_anchor = (1.0, 0.5))
         ax.set_ylim(bottom=0)
         fig.savefig(exPath+'APs.png')  
+        plt.close(fig) 
 
       except Exception as e:
         print(e)
