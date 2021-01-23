@@ -195,8 +195,8 @@ import subprocess
 import time
 
 #Parameters
-experimentName = "TrainOnReal_EvalOnReal_Average_50_BatchSize_2"
-loadNet = False
+experimentName = "TrainOnSynth_from_pretrained_EvalOnSynth_Average_50_BatchSize_2_SDG_optimizer_with_shuffle"
+loadNet = True
 train = True
 data_type = 'synthetic' #'synthetic' or 'AVD'
 numToTrainOn = 100000
@@ -433,7 +433,8 @@ if train:
         ax.set_position([0.1,0.1,0.5,0.8])
         for key, value in APDict.iteritems():
           value.extend([value[-1]]*(len(accListX)-len(value)))
-          ax.plot(accListX, value, label="Category: "+key)
+          l_style = random.choice(['-', '--', '-.', ':'])
+          ax.plot(accListX, value, linestyle=l_style, label="Category: "+key)
         leg = ax.legend(loc = 'center left', bbox_to_anchor = (1.0, 0.5))
         ax.set_ylim(bottom=0)
         fig.savefig(exPath+'APs.png')  
