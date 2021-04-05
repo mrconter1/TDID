@@ -331,7 +331,7 @@ if train:
 
           #Save one image from each category
           files = [f for f in listdir(exPath) if isfile(join(exPath, f))]
-          name = category_id+".png"
+          name = str(category_id)+".png"
           if name not in files:
             cv2.imwrite(exPath + name, target1)
 
